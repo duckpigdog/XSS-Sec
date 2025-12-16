@@ -1,5 +1,6 @@
 <?php
 include '../headers.php';
+setcookie("flag", "flag{14f21ca0-a13e-416e-a7b1-f93cb69df341}", time() + 3600, "/", "", false, false);
 $file = '../data/comments.json';
 
 // Handle POST

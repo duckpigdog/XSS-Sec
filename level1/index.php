@@ -18,6 +18,7 @@
         <form method="GET" action="">
             <input type="text" name="name" placeholder="Enter your name">
             <button type="submit">Submit</button>
+            <button type="button" onclick="window.location.href='index.php'" style="background: #ff3333; margin-left: 5px;">Clear Input</button>
         </form>
         
         <div class="message">

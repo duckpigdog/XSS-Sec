@@ -1,4 +1,7 @@
-<?php include '../headers.php'; ?>
+<?php 
+include '../headers.php'; 
+setcookie("flag", "flag{b1e49ef8-e15c-4e1e-b82f-04660ed96a98}", time() + 3600, "/", "", false, false);
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,6 +17,9 @@
         </div>
         <h1 data-text="Level 2: DOM-based XSS">Level 2: DOM-based XSS</h1>
         <p>Your task: Manipulate the DOM to execute JavaScript. Try using the URL parameter 'keyword'.</p>
+        <div style="margin-bottom: 20px;">
+            <button onclick="window.location.href='index.php'" style="background: #ff3333;">Clear Payload</button>
+        </div>
         
         <div id="result" class="message"></div>
 
