@@ -1,6 +1,6 @@
 <?php
-// admin.php - Headless Admin Bot
-include 'headers.php';
+// admin.php - Headless Admin Bot for Level 1
+include '../headers.php';
 // Only accepts POST requests.
 // Invisible to the user (no UI output unless in debug mode, but we hide it via JS/CSS).
 
@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 // Set the flag cookie (HttpOnly = false for XSS)
-setcookie("flag", "flag{cyberpunk_xss_master_2077}", time() + 3600, "/", "", false, false);
+setcookie("flag", "flag{949703b0-facb-4492-b44a-093dcb0ad1b1}", time() + 3600, "/", "", false, false);
 
 $target_url = isset($_POST['url']) ? $_POST['url'] : '';
 
@@ -49,8 +49,3 @@ if (empty($target_url)) {
     </script>
 </body>
 </html>
-<?php
-// DEBUG: Append stolen data to a secret log for the user to see in the UI
-// In a real scenario, the attacker checks their own server.
-// Here, we expose it so the user knows they succeeded.
-?>

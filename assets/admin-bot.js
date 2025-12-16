@@ -9,10 +9,19 @@ const AdminBot = {
     init: function() {
         // Listen for messages from the bot
         window.addEventListener('message', (event) => {
+            // Ignore messages that don't look like ours to avoid processing extension messages
+            if (!event.data || typeof event.data !== 'object') return;
+
+            if (event.data.type === 'bot_visit_start') {
+                console.log('%c [AdminBot] Bot started visiting target...', 'color: orange');
+            }
+            
             if (event.data.type === 'bot_visit_end') {
+                console.log('%c [AdminBot] Bot finished visit.', 'color: green');
                 this.updateStatus('VISIT COMPLETE', 'status-ok');
             }
         });
+        console.log('[AdminBot] Initialized. Waiting for commands.');
     },
 
     send: function(levelType, payloadInputId) {
@@ -49,6 +58,7 @@ const AdminBot = {
                 return;
         }
 
+        console.log('[AdminBot] Target URL generated:', targetUrl);
         this.dispatchBot(targetUrl);
     },
 
@@ -60,7 +70,7 @@ const AdminBot = {
         // Create a hidden form to submit POST request to admin.php
         const form = document.createElement('form');
         form.method = 'POST';
-        form.action = '../admin.php'; // Assuming we are in levelX/ directory
+        form.action = 'admin.php'; // Assuming we are in levelX/ directory
         form.target = this.iframeId;
         form.style.display = 'none';
 
@@ -81,7 +91,12 @@ const AdminBot = {
         this.updateStatus('DISPATCHING BOT...', 'status-proc');
         
         // Submit
-        form.submit();
+        try {
+            form.submit();
+        } catch (e) {
+            console.error('[AdminBot] Form submit error:', e);
+            this.updateStatus('ERROR: SUBMIT FAILED', 'status-err');
+        }
         
         // Cleanup form
         setTimeout(() => form.remove(), 100);
