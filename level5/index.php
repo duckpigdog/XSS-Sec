@@ -1,4 +1,4 @@
-<?php 
+﻿<?php 
 include '../headers.php'; 
 setcookie("flag", "flag{fb6abe6c-0278-4961-ad54-e8b28bd53eb9}", time() + 3600, "/", "", false, false);
 ?>
@@ -16,8 +16,6 @@ setcookie("flag", "flag{fb6abe6c-0278-4961-ad54-e8b28bd53eb9}", time() + 3600, "
             <a href="../index.php">Home</a>
         </div>
         <h1 data-text="Level 5: Filter Bypass">Level 5: Filter Bypass</h1>
-        <p>Your task: Inject JavaScript, but be warned: the word &lt;script&gt; is banned!</p>
-        
         <form method="GET" action="">
             <input type="text" name="keyword" placeholder="Enter payload here" value="">
             <button type="submit">Search</button>
@@ -43,3 +41,4 @@ setcookie("flag", "flag{fb6abe6c-0278-4961-ad54-e8b28bd53eb9}", time() + 3600, "
     </div>
 </body>
 </html>
+

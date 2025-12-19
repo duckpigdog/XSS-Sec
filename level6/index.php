@@ -1,4 +1,4 @@
-<?php 
+﻿<?php 
 include '../headers.php'; 
 setcookie("flag", "flag{1b6a3fb2-1c77-407f-9695-450121751f7e}", time() + 3600, "/", "", false, false);
 ?>
@@ -16,8 +16,6 @@ setcookie("flag", "flag{1b6a3fb2-1c77-407f-9695-450121751f7e}", time() + 3600, "
             <a href="../index.php">Home</a>
         </div>
         <h1 data-text="Level 6: Quote Filtering">Level 6: Quote Filtering</h1>
-        <p>Your task: The developer decided that double quotes are dangerous and filtered them out.</p>
-        
         <form method="GET" action="">
             <?php
                 $keyword = isset($_GET['keyword']) ? $_GET['keyword'] : '';
@@ -44,3 +42,4 @@ setcookie("flag", "flag{1b6a3fb2-1c77-407f-9695-450121751f7e}", time() + 3600, "
     </div>
 </body>
 </html>
+

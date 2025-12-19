@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 include '../headers.php';
 setcookie("flag", "flag{14f21ca0-a13e-416e-a7b1-f93cb69df341}", time() + 3600, "/", "", false, false);
 $file = '../data/comments.json';
@@ -57,8 +57,6 @@ if (file_exists($file)) {
             <a href="../index.php">Home</a>
         </div>
         <h1 data-text="Level 3: Stored XSS">Level 3: Stored XSS</h1>
-        <p>Your task: Leave a message that executes JavaScript for anyone who visits this page.</p>
-        
         <form method="POST" action="">
             <textarea name="comment" rows="4" placeholder="Leave a comment..."></textarea>
             <button type="submit">Post Comment</button>

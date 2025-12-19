@@ -1,6 +1,6 @@
-<?php 
+﻿<?php 
 include '../headers.php'; 
-setcookie("flag", "flag{protocol_obfuscation_level10}", time() + 3600, "/", "", false, false);
+setcookie("flag", "flag{2ffbdc31-a616-44d3-96a6-4681f714bb06}", time() + 3600, "/", "", false, false);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -16,8 +16,6 @@ setcookie("flag", "flag{protocol_obfuscation_level10}", time() + 3600, "/", "", 
             <a href="../index.php">Home</a>
         </div>
         <h1 data-text="Level 10: Protocol Bypass">Level 10: Protocol Bypass</h1>
-        <p>Your task: The system tries to block the javascript: protocol.</p>
-        
         <form method="GET" action="">
             <input type="text" name="keyword" placeholder="Enter payload here" value="<?php echo isset($_GET['keyword']) ? htmlspecialchars($_GET['keyword']) : ''; ?>">
             <button type="submit">Add Link</button>
@@ -80,3 +78,4 @@ setcookie("flag", "flag{protocol_obfuscation_level10}", time() + 3600, "/", "", 
     </div>
 </body>
 </html>
+

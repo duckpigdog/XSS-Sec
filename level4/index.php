@@ -1,4 +1,4 @@
-<?php 
+﻿<?php 
 include '../headers.php'; 
 setcookie("flag", "flag{64145663-3bf8-49aa-a2ac-95a13ee84e96}", time() + 3600, "/", "", false, false);
 ?>
@@ -16,8 +16,6 @@ setcookie("flag", "flag{64145663-3bf8-49aa-a2ac-95a13ee84e96}", time() + 3600, "
             <a href="../index.php">Home</a>
         </div>
         <h1 data-text="Level 4: Attribute Breakout">Level 4: Attribute Breakout</h1>
-        <p>Your task: Break out of the HTML attribute to execute JavaScript.</p>
-        
         <form method="GET" action="">
             <?php
                 $keyword = isset($_GET['keyword']) ? $_GET['keyword'] : 'Try to break me';
@@ -40,3 +38,4 @@ setcookie("flag", "flag{64145663-3bf8-49aa-a2ac-95a13ee84e96}", time() + 3600, "
     </div>
 </body>
 </html>
+

@@ -1,6 +1,6 @@
-<?php 
+﻿<?php 
 include '../headers.php'; 
-setcookie("flag", "flag{check_url_bypass_level9}", time() + 3600, "/", "", false, false);
+setcookie("flag", "flag{6a9f1e24-a7a2-4149-884d-497e6376a2b3}", time() + 3600, "/", "", false, false);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -16,8 +16,6 @@ setcookie("flag", "flag{check_url_bypass_level9}", time() + 3600, "/", "", false
             <a href="../index.php">Home</a>
         </div>
         <h1 data-text="Level 9: URL Validation">Level 9: URL Validation</h1>
-        <p>Your task: The system now checks if your input is a valid URL (must contain http://).</p>
-        
         <form method="GET" action="">
             <input type="text" name="keyword" placeholder="Enter URL here" value="<?php echo isset($_GET['keyword']) ? htmlspecialchars($_GET['keyword']) : ''; ?>">
             <button type="submit">Add Link</button>
@@ -30,11 +28,7 @@ setcookie("flag", "flag{check_url_bypass_level9}", time() + 3600, "/", "", false
                 $str = $_GET['keyword'];
                 
                 // Security Check 1: Keyword Removal (replaces with empty string)
-                $str = str_replace("script", "scr_ipt", $str); // Let's block script directly to force encoding or just handle validation
-                // Wait, user asked for "Double Write" bypass.
-                // Let's use str_replace('', ...) logic again but maybe slightly different?
-                // Actually, let's focus on the URL validation bypass + keywords.
-                
+                // Vulnerability: Only replaces once, allowing double write bypass.
                 $str = str_ireplace("script", "", $str); 
                 
                 // Security Check 2: Must contain "http://"
@@ -50,3 +44,4 @@ setcookie("flag", "flag{check_url_bypass_level9}", time() + 3600, "/", "", false
     </div>
 </body>
 </html>
+

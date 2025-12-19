@@ -1,4 +1,4 @@
-<?php include '../headers.php'; ?>
+﻿<?php include '../headers.php'; ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -13,8 +13,6 @@
             <a href="../index.php">Home</a>
         </div>
         <h1 data-text="Level 1: Reflected XSS">Level 1: Reflected XSS</h1>
-        <p>Your task: Inject a script to pop up an alert.</p>
-        
         <form method="GET" action="">
             <input type="text" name="name" placeholder="Enter your name">
             <button type="submit">Submit</button>

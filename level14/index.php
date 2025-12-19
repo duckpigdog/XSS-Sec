@@ -1,13 +1,13 @@
-<?php 
+﻿<?php 
 include '../headers.php'; 
-setcookie("flag", "flag{js_variable_breakout_level14}", time() + 3600, "/", "", false, false);
+setcookie("flag", "flag{c806ce06-d997-4871-a267-4f71f6872664}", time() + 3600, "/", "", false, false);
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Level 14 - JS Variable Escape</title>
+    <title>Level 14 - Double Encoding</title>
     <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body>
@@ -15,8 +15,7 @@ setcookie("flag", "flag{js_variable_breakout_level14}", time() + 3600, "/", "", 
         <div class="nav">
             <a href="../index.php">Home</a>
         </div>
-        <h1 data-text="Level 14: JS Variable Escape">Level 14: JS Variable Escape</h1>
-        <p>Your task: The input is put inside a JavaScript variable. Can you break out?</p>
+        <h1 data-text="Level 14: Double Encoding">Level 14: Double Encoding</h1>
         
         <form method="GET" action="">
             <input type="text" name="keyword" placeholder="Enter payload here" value="<?php echo isset($_GET['keyword']) ? htmlspecialchars($_GET['keyword']) : ''; ?>">
@@ -27,36 +26,39 @@ setcookie("flag", "flag{js_variable_breakout_level14}", time() + 3600, "/", "", 
         <div id="result" class="message"></div>
 
         <script>
-            // Vulnerability: PHP outputs input directly into a JS string variable.
-            // It does NOT use proper JS encoding (json_encode).
-            // It might escape double quotes, but maybe not single quotes, or maybe nothing.
-            
             <?php
             if (isset($_GET['keyword'])) {
                 $str = $_GET['keyword'];
-                // Simulation: The dev thought addslashes() or escaping double quotes is enough.
-                // Or maybe they just forgot.
-                // Let's assume they did NOT escape anything for this level to demonstrate the concept clearly.
-                // But to make it slightly realistic, let's say they used htmlspecialchars() which is for HTML context, NOT JS context.
-                // htmlspecialchars() converts " to &quot; and ' to &#039; (if ENT_QUOTES set).
-                // BUT if they didn't set ENT_QUOTES, single quotes might slip through.
-                // OR simpler: They just echo it.
                 
-                // Let's go with: Direct echo (No sanitization), but inside a variable.
-                // var search = "USER_INPUT";
+                // Security Check 1 (WAF Layer):
+                // We strictly forbid literal quotes and angle brackets.
+                // This happens AFTER the first automatic URL decode (by PHP $_GET).
+                // If user sends '%27', PHP sees "'".
+                // If user sends "'", PHP sees "'".
+                // Both are caught here.
                 
-                // If user inputs: "; alert(1); //
-                // Result: var search = ""; alert(1); //";
+                if (preg_match("/['\"<>]/", $str)) {
+                    // WAF Blocked: Sanitize dangerous chars
+                    $str = str_replace(['\'', '"', '<', '>'], '_', $str);
+                }
                 
-                echo "var search = \"$str\";";
-            } else {
-                echo "var search = \"\";";
+                // Vulnerability Implementation (Double Encoding Logic):
+                
+                // 1. Backend Encoding
+                // The backend THEN proceeds to output the "cleaned" string into a JS variable.
+                $encoded = urlencode($str);
+                
+                // 2. Frontend Logic
+                echo "\n            var rawInput = '$encoded';";
+                
+                echo "\n            // Legacy System: Two rounds of decoding";
+                echo "\n            var step1 = decodeURIComponent(rawInput);";
+                echo "\n            var step2 = decodeURIComponent(step1);";
+                
+                // Correct sink: We need to make sure the breakout syntax is valid.
+                echo "\n            setTimeout('console.log(\"Log: ' + step2 + '\")', 100);";
             }
             ?>
-            
-            if (search) {
-                document.getElementById('result').innerText = "Searching for: " + search;
-            }
         </script>
     </div>
 </body>

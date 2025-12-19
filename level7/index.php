@@ -1,4 +1,4 @@
-<?php 
+﻿<?php 
 include '../headers.php'; 
 setcookie("flag", "flag{4fb8d6c8-7c1d-446c-8dd8-49a5f87d37e8}", time() + 3600, "/", "", false, false);
 ?>
@@ -16,8 +16,6 @@ setcookie("flag", "flag{4fb8d6c8-7c1d-446c-8dd8-49a5f87d37e8}", time() + 3600, "
             <a href="../index.php">Home</a>
         </div>
         <h1 data-text="Level 7: Keyword Removal">Level 7: Keyword Removal</h1>
-        <p>Your task: The admin is removing dangerous words like 'script', 'on', 'src', etc.</p>
-        
         <form method="GET" action="">
             <input type="text" name="keyword" placeholder="Enter payload here" value="<?php echo isset($_GET['keyword']) ? htmlspecialchars($_GET['keyword']) : ''; ?>">
             <button type="submit">Search</button>
@@ -55,3 +53,4 @@ setcookie("flag", "flag{4fb8d6c8-7c1d-446c-8dd8-49a5f87d37e8}", time() + 3600, "
     </div>
 </body>
 </html>
+

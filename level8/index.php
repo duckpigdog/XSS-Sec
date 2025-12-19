@@ -1,6 +1,6 @@
-<?php 
+﻿<?php 
 include '../headers.php'; 
-setcookie("flag", "flag{html_entity_encoding_level8}", time() + 3600, "/", "", false, false);
+setcookie("flag", "flag{8aa86ec1-58b4-44e0-b457-4ef5d05048bd}", time() + 3600, "/", "", false, false);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -16,8 +16,6 @@ setcookie("flag", "flag{html_entity_encoding_level8}", time() + 3600, "/", "", f
             <a href="../index.php">Home</a>
         </div>
         <h1 data-text="Level 8: Encoding Bypass">Level 8: Encoding Bypass</h1>
-        <p>Your task: The filter is strict, but maybe the browser can help decode?</p>
-        
         <form method="GET" action="">
             <input type="text" name="keyword" placeholder="Enter payload here" value="<?php echo isset($_GET['keyword']) ? htmlspecialchars($_GET['keyword']) : ''; ?>">
             <button type="submit">Add Link</button>
@@ -81,3 +79,4 @@ setcookie("flag", "flag{html_entity_encoding_level8}", time() + 3600, "/", "", f
     </div>
 </body>
 </html>
+

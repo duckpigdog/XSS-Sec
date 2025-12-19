@@ -1,76 +1,105 @@
-<?php
+<?php 
 include '../headers.php'; 
-setcookie("flag", "flag{upload_mime_sniff_level20}", time() + 3600, "/", "", false, false);
-
-// Upload Logic
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
-    $target_dir = "uploads/";
-    if (!file_exists($target_dir)) {
-        mkdir($target_dir, 0777, true);
-    }
-    
-    $file = $_FILES['file'];
-    $filename = basename($file['name']);
-    $target_file = $target_dir . $filename;
-    
-    // Security Check: Blacklist Extension
-    // We block .php, .php5, .phtml to prevent RCE
-    $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-    $blacklist = ['php', 'php5', 'phtml', 'exe', 'sh'];
-    
-    if (in_array($ext, $blacklist)) {
-        $error = "Extension blocked!";
-    } else {
-        // MIME Type Check (Weak)
-        // We allow images and text, but maybe block 'text/html'?
-        // Let's implement a filter that blocks 'text/html' MIME type but allows others.
-        
-        if ($file['type'] === 'text/html') {
-            $error = "HTML files are not allowed!";
-        } else {
-            // Move file
-            if (move_uploaded_file($file['tmp_name'], $target_file)) {
-                $success = "File uploaded successfully! <a href='$target_file' target='_blank'>View File</a>";
-            } else {
-                $error = "Upload failed.";
-            }
-        }
-    }
-}
+setcookie("flag", "flag{f86af6e9-4e9f-4088-8755-f227388b84d1}", time() + 3600, "/", "", false, false);
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Level 20 - File Upload XSS</title>
-    <link rel="stylesheet" href="../assets/style.css">
+    <title>Customer Feedback - TechCorp</title>
+    <!-- Use jQuery 3.x but we simulate the vulnerability via manual code or older logic if needed -->
+    <!-- The vulnerability is in how we use jQuery, not necessarily jQuery itself -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; color: #1c1e21; margin: 0; padding: 0; }
+        .header { background: #1877f2; color: #fff; padding: 15px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; }
+        .logo { font-weight: bold; font-size: 1.4em; margin-right: 30px; }
+        .nav-items a { color: #fff; text-decoration: none; margin-right: 20px; font-weight: 500; opacity: 0.9; }
+        .nav-items a:hover { opacity: 1; }
+        
+        .main-container { max-width: 700px; margin: 40px auto; background: #fff; padding: 40px; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .page-title { margin-top: 0; color: #1c1e21; border-bottom: 1px solid #e5e5e5; padding-bottom: 20px; margin-bottom: 30px; }
+        
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; font-weight: 600; color: #606770; }
+        .form-control { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 16px; transition: border-color 0.2s; }
+        .form-control:focus { border-color: #1877f2; outline: none; }
+        
+        .btn-submit { background-color: #1877f2; color: #fff; border: none; padding: 12px 30px; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; }
+        .btn-submit:hover { background-color: #166fe5; }
+        
+        .back-link { display: inline-block; margin-top: 20px; color: #1877f2; text-decoration: none; font-weight: 500; }
+        .back-link:hover { text-decoration: underline; }
+    </style>
+    <script>
+        // Auto-redirect to include returnPath if missing
+        // This simulates a real scenario where you arrive here from another page
+        if (!window.location.search.includes('returnPath=')) {
+            var newUrl = new URL(window.location.href);
+            newUrl.searchParams.set('returnPath', '/');
+            window.history.replaceState({}, '', newUrl);
+            // Alternatively, trigger a reload:
+            // window.location.href = newUrl.toString();
+        }
+    </script>
 </head>
 <body>
-    <div class="container">
-        <div class="nav">
-            <a href="../index.php">Home</a>
+    <div class="header">
+        <div class="logo">TechCorp</div>
+        <div class="nav-items">
+            <a href="#">Products</a>
+            <a href="#">Solutions</a>
+            <a href="#">Support</a>
         </div>
-        <h1 data-text="Level 20: File Upload XSS">Level 20: File Upload XSS</h1>
-        <p>Your task: Upload a file that executes JavaScript when viewed.</p>
-        <p>Rules: No <code>.php</code> (we don't want RCE). No <code>text/html</code> MIME type.</p>
+    </div>
+
+    <div class="main-container">
+        <h2 class="page-title">Submit Feedback</h2>
+        <p style="color: #606770; margin-bottom: 30px;">We value your feedback. Please let us know how we can improve our products.</p>
         
-        <form method="POST" action="" enctype="multipart/form-data">
-            <label>Select File:</label>
-            <input type="file" name="file" required>
-            <button type="submit">Upload</button>
+        <form id="feedbackForm">
+            <div class="form-group">
+                <label>Subject</label>
+                <input type="text" class="form-control" placeholder="Feature Request / Bug Report">
+            </div>
+            
+            <div class="form-group">
+                <label>Message</label>
+                <textarea class="form-control" rows="5" placeholder="Describe your experience..."></textarea>
+            </div>
+            
+            <button type="submit" class="btn-submit">Submit Feedback</button>
         </form>
         
-        <div class="message">
-            <?php
-            if (isset($error)) echo "<span style='color:red'>$error</span>";
-            if (isset($success)) echo "<span style='color:green'>$success</span>";
-            ?>
-        </div>
+        <!-- Vulnerability Source: location.search (URL parameters) -->
+        <!-- Vulnerability Sink: jQuery anchor href attribute -->
         
-        <div style="margin-top:20px; font-size:0.8em; color:#666;">
-            Hint: Browsers sometimes guess the content type (MIME Sniffing).
-        </div>
+        <a id="backLink" class="back-link" href="../index.php">Back to Home</a>
+        
+        <script>
+            $(document).ready(function() {
+                // Get the 'returnPath' parameter from the URL
+                var params = new URLSearchParams(window.location.search);
+                var returnPath = params.get('returnPath');
+                
+                // If the auto-redirect script just ran, window.location.search might be updated in history but not DOM
+                // But new URLSearchParams(window.location.search) reads current location.
+                
+                if (returnPath) {
+                    // Vulnerable Code:
+                    // Using jQuery's attr() to set href from untrusted source
+                    // If returnPath is "javascript:alert(1)", it executes XSS.
+                    $('#backLink').attr('href', returnPath);
+                }
+            });
+            
+            // Simple form handling (simulation)
+            $('#feedbackForm').on('submit', function(e) {
+                e.preventDefault();
+                alert('Thank you for your feedback!');
+            });
+        </script>
     </div>
 </body>
 </html>

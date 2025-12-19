@@ -1,6 +1,6 @@
-<?php 
+﻿<?php 
 include '../headers.php'; 
-setcookie("flag", "flag{post_message_iframe_level16}", time() + 3600, "/", "", false, false);
+setcookie("flag", "flag{cc24faef-8a6e-45a9-85d8-72db6e41a55c}", time() + 3600, "/", "", false, false);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -16,9 +16,6 @@ setcookie("flag", "flag{post_message_iframe_level16}", time() + 3600, "/", "", f
             <a href="../index.php">Home</a>
         </div>
         <h1 data-text="Level 16: PostMessage XSS">Level 16: PostMessage XSS</h1>
-        <p>Your task: The system loads your input into an <code>iframe</code>.</p>
-        <p>But <code>javascript:</code> is blocked. Can you talk to the parent?</p>
-        
         <form method="GET" action="">
             <input type="text" name="keyword" placeholder="Enter URL (e.g. data:...)" value="<?php echo isset($_GET['keyword']) ? htmlspecialchars($_GET['keyword']) : ''; ?>">
             <button type="submit">Load</button>
@@ -67,3 +64,4 @@ setcookie("flag", "flag{post_message_iframe_level16}", time() + 3600, "/", "", f
     </div>
 </body>
 </html>
+

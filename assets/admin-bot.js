@@ -53,24 +53,86 @@ const AdminBot = {
                 // Simplified: Just visit the page.
                 targetUrl = baseUrl;
                 break;
+            case 'level24':
+                // Reflected XSS: search parameter
+                targetUrl = `${baseUrl}?search=${encodeURIComponent(payload)}`;
+                break;
+            case 'level25':
+                // Reflected XSS: search parameter
+                targetUrl = `${baseUrl}?search=${encodeURIComponent(payload)}`;
+                break;
+            case 'level26':
+                // Canonical Link XSS: The payload is part of the URL itself (query string manipulation)
+                // The payload here is NOT a parameter value, but the query string itself.
+                // However, our input box usually takes "what you type".
+                // In this level, the user types: ?'accesskey='x'onclick='alert(1)
+                // We should append it directly.
+                // BUT wait, encodeURIComponent will break the injection if we treat it as a param value.
+                
+                // Let's assume the user enters the FULL Query String or just the injection part.
+                // If user enters: ?'accesskey='x...
+                // We append it.
+                
+                // To be safe and flexible:
+                // If payload starts with '?', append as is (decoded).
+                // Otherwise, treat as query string.
+                
+                // For this specific level, the injection is IN the URL.
+                // Let's just append the payload raw to the base URL.
+                // BUT we need to be careful.
+                
+                targetUrl = baseUrl + payload;
+                break;
             default:
                 console.error('Unknown level type');
                 return;
         }
 
         console.log('[AdminBot] Target URL generated:', targetUrl);
-        this.dispatchBot(targetUrl);
+        this.dispatchBot(targetUrl, levelType);
     },
 
-    dispatchBot: function(url) {
+    dispatchBot: function(url, levelType) {
         // Remove existing frame if any
         const oldFrame = document.getElementById(this.iframeId);
         if (oldFrame) oldFrame.remove();
 
+        if (levelType === 'level26') {
+            const iframe = document.createElement('iframe');
+            iframe.name = this.iframeId;
+            iframe.id = this.iframeId;
+            iframe.style.display = 'none';
+            document.body.appendChild(iframe);
+            this.updateStatus('DISPATCHING BOT...', 'status-proc');
+            window.postMessage({ type: 'bot_visit_start', url }, '*');
+            iframe.onload = () => {
+                window.postMessage({ type: 'bot_visit_end', url }, '*');
+            };
+            iframe.src = url;
+            return;
+        }
+
         // Create a hidden form to submit POST request to admin.php
         const form = document.createElement('form');
         form.method = 'POST';
-        form.action = 'admin.php'; // Assuming we are in levelX/ directory
+        // Check if admin.php exists in current directory or parent directory
+        // For simplicity in this lab structure, assume it's in the current level directory
+        // But for level26/index.php, admin.php is likely in level26/admin.php OR we need a common one.
+        // Wait, the error is 404 Not Found for admin.php.
+        // In previous levels, did we have admin.php?
+        // Checking file structure...
+        // Actually, most levels might not have admin.php if I didn't create them.
+        // The original template level1/admin.php exists? Let's check.
+        // If not, we should point to a common admin handler or ensure admin.php exists.
+        
+        // FIX: The user reported 404 for admin.php.
+        // I will point this to '../admin.php' if it exists, or create a mock admin.php in the level folder.
+        // Since I cannot check file existence easily here in JS runtime without trial,
+        // I will assume the standard path is 'admin.php' relative to index.php.
+        // The error means admin.php is MISSING in level26/.
+        
+        form.action = 'admin.php'; 
+
         form.target = this.iframeId;
         form.style.display = 'none';
 

@@ -1,4 +1,4 @@
-<?php 
+﻿<?php 
 // 1. JSONP Endpoint Simulation
 // If 'callback' parameter is present, we act as an API returning JSONP.
 // This is commonly found in the same domain or subdomains.
@@ -17,7 +17,7 @@ if (isset($_GET['callback'])) {
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';");
 
 include '../headers.php'; 
-setcookie("flag", "flag{csp_bypass_jsonp_level17}", time() + 3600, "/", "", false, false);
+setcookie("flag", "flag{8d2a43e4-7157-4349-8cbe-192c3c3a08a1}", time() + 3600, "/", "", false, false);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -33,11 +33,6 @@ setcookie("flag", "flag{csp_bypass_jsonp_level17}", time() + 3600, "/", "", fals
             <a href="../index.php">Home</a>
         </div>
         <h1 data-text="Level 17: CSP Bypass">Level 17: CSP Bypass</h1>
-        <p>Your task: A strict <b>Content Security Policy (CSP)</b> is enabled.</p>
-        <p>Policy: <code>default-src 'self'; script-src 'self';</code></p>
-        <p>This means: No inline scripts (<code>&lt;script&gt;...&lt;/script&gt;</code>) and no event handlers (<code>onclick</code>).</p>
-        <p>Hint: Look for allowed execution sources on this domain.</p>
-        
         <form method="GET" action="">
             <input type="text" name="keyword" placeholder="Enter payload here" value="<?php echo isset($_GET['keyword']) ? htmlspecialchars($_GET['keyword']) : ''; ?>">
             <button type="submit">Search</button>
@@ -67,3 +62,4 @@ setcookie("flag", "flag{csp_bypass_jsonp_level17}", time() + 3600, "/", "", fals
     </div>
 </body>
 </html>
+

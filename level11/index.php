@@ -1,13 +1,13 @@
-<?php 
+﻿<?php 
 include '../headers.php'; 
-setcookie("flag", "flag{js_decode_bypass_level11}", time() + 3600, "/", "", false, false);
+setcookie("flag", "flag{9b93b9f9-e9e2-4168-9871-4540c20c97a7}", time() + 3600, "/", "", false, false);
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Level 11 - URL Encoding</title>
+    <title>Level 11 - JS Context</title>
     <link rel="stylesheet" href="../assets/style.css">
 </head>
 <body>
@@ -15,8 +15,7 @@ setcookie("flag", "flag{js_decode_bypass_level11}", time() + 3600, "/", "", fals
         <div class="nav">
             <a href="../index.php">Home</a>
         </div>
-        <h1 data-text="Level 11: URL Encoding">Level 11: URL Encoding</h1>
-        <p>Your task: The server encodes your input. Can you still execute it?</p>
+        <h1 data-text="Level 11: JS Context">Level 11: JS Context</h1>
         
         <form method="GET" action="">
             <input type="text" name="keyword" placeholder="Enter payload here" value="<?php echo isset($_GET['keyword']) ? htmlspecialchars($_GET['keyword']) : ''; ?>">
@@ -31,23 +30,25 @@ setcookie("flag", "flag{js_decode_bypass_level11}", time() + 3600, "/", "", fals
                 $str = $_GET['keyword'];
                 
                 // Vulnerability: 
-                // The input is put into a JS variable string.
-                // The server performs URL Encoding (urlencode) to "sanitize" it.
-                // urlencode converts characters like <, >, ", ' to %3C, %3E, %22, %27 etc.
-                // This usually prevents breaking out of the JS string.
+                // Input is echoed directly into a JavaScript string variable.
+                // It is NOT encoded for JavaScript context (no json_encode).
+                // It might be htmlspecialchars() encoded, but that doesn't escape single quotes by default (unless ENT_QUOTES is set).
+                // Or simply, we just echo it.
                 
-                // HOWEVER, if the developer mistakenly decodes it on the client side 
-                // OR if the input is used in a sink that decodes it (like setTimeout, or DOM writes), XSS is possible.
+                // For this level, we simulate a common mistake: 
+                // Developer uses user input inside a JS string without escaping quotes.
                 
-                // Let's simulate a scenario where the dev wants to "display" the search term in JS
-                // but realizes URL encoding makes it look ugly, so they decode it in JS for display.
+                // Context: var t_str = 'USER_INPUT';
+                // Goal: ';alert(1);//
                 
-                $encoded_str = urlencode($str);
+                // We deliberately DO NOT escape single quotes here.
+                // We only escape < and > to prevent direct tag injection, forcing the user to use JS context breakout.
+                $str_safe = str_replace(['<', '>'], ['&lt;', '&gt;'], $str);
                 
-                echo "var searchTerm = '$encoded_str';";
-                echo "\n            // Dev Note: Decode for display";
-                echo "\n            var decodedTerm = decodeURIComponent(searchTerm);";
-                echo "\n            document.write('Current Search: ' + decodedTerm);";
+                echo "var t_str = '$str_safe';";
+                echo "\n            document.write('Current Search: ' + t_str);";
+            } else {
+                echo "var t_str = 'Guest';";
             }
             ?>
             </script>
@@ -55,3 +56,4 @@ setcookie("flag", "flag{js_decode_bypass_level11}", time() + 3600, "/", "", fals
     </div>
 </body>
 </html>
+

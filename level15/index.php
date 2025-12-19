@@ -1,6 +1,6 @@
 <?php 
 include '../headers.php'; 
-setcookie("flag", "flag{ng_bind_html_bypass_level15}", time() + 3600, "/", "", false, false);
+setcookie("flag", "flag{d60d4d81-43f1-4a14-b909-c46cb3472c44}", time() + 3600, "/", "", false, false);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -10,7 +10,7 @@ setcookie("flag", "flag{ng_bind_html_bypass_level15}", time() + 3600, "/", "", f
     <title>Level 15 - Angular/Framework XSS</title>
     <link rel="stylesheet" href="../assets/style.css">
     <!-- Load AngularJS (simulated or real CDN) -->
-    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.2/angular.min.js"></script>
+    <script src="../assets/angular.min.js"></script>
 </head>
 <body ng-app="">
     <div class="container">
@@ -18,9 +18,6 @@ setcookie("flag", "flag{ng_bind_html_bypass_level15}", time() + 3600, "/", "", f
             <a href="../index.php">Home</a>
         </div>
         <h1 data-text="Level 15: Framework Injection">Level 15: Framework Injection</h1>
-        <p>Your task: We are using a modern framework (AngularJS) to sanitize HTML. Or are we?</p>
-        <p>The input is displayed using <code>ng-bind-html</code> (unsafe mode simulated) or template injection.</p>
-        
         <form method="GET" action="">
             <input type="text" name="keyword" placeholder="Enter payload here" value="<?php echo isset($_GET['keyword']) ? htmlspecialchars($_GET['keyword']) : ''; ?>">
             <button type="submit">Search</button>
@@ -53,9 +50,8 @@ setcookie("flag", "flag{ng_bind_html_bypass_level15}", time() + 3600, "/", "", f
         
         <div style="margin-top:20px; font-size:0.8em; color:#666;">
             Angular Version: 1.8.2 <br>
-            Try to trigger an alert using Template Injection. <br>
-            Example: <code>{{constructor.constructor('alert(1)')()}}</code>
         </div>
     </div>
 </body>
 </html>
+

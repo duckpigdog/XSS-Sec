@@ -1,6 +1,6 @@
-<?php 
+﻿<?php 
 include '../headers.php'; 
-setcookie("flag", "flag{frontend_regex_bypass_level13}", time() + 3600, "/", "", false, false);
+setcookie("flag", "flag{ff7321ad-67e8-4e92-b126-915f360c5e30}", time() + 3600, "/", "", false, false);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -16,8 +16,6 @@ setcookie("flag", "flag{frontend_regex_bypass_level13}", time() + 3600, "/", "",
             <a href="../index.php">Home</a>
         </div>
         <h1 data-text="Level 13: Frontend Filter">Level 13: Frontend Filter</h1>
-        <p>Your task: The backend is lazy and relies on JavaScript to filter XSS.</p>
-        
         <form method="GET" action="">
             <input type="text" name="keyword" placeholder="Enter payload here" value="<?php echo isset($_GET['keyword']) ? htmlspecialchars($_GET['keyword']) : ''; ?>">
             <button type="submit">Search</button>
@@ -39,7 +37,7 @@ setcookie("flag", "flag{frontend_regex_bypass_level13}", time() + 3600, "/", "",
                     const blacklist = /<script|javascript:/i;
                     
                     if (blacklist.test(keyword)) {
-                        document.getElementById('result').innerText = "🚫 Malicious content detected!";
+                        document.getElementById('result').innerText = "馃毇 Malicious content detected!";
                         document.getElementById('result').style.color = "red";
                     } else {
                         // Sink: innerHTML
@@ -54,3 +52,4 @@ setcookie("flag", "flag{frontend_regex_bypass_level13}", time() + 3600, "/", "",
     </div>
 </body>
 </html>
+
