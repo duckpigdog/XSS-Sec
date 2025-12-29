@@ -28,6 +28,11 @@ $levels = [
     24 => ['name' => 'Level 24: WAF Bypass (Tags/Attrs)', 'desc' => 'Reflected XSS with strict WAF.'],
     25 => ['name' => 'Level 25: SVG Animate XSS', 'desc' => 'SVG-specific vector bypass.'],
     26 => ['name' => 'Level 26: Canonical Link XSS', 'desc' => 'Escaping single quotes issue.'],
+    27 => ['name' => 'Level 27: Stored XSS in onclick', 'desc' => 'Entities vs escaping pitfall.'],
+    28 => ['name' => 'Level 28: Template Literal XSS', 'desc' => 'Reflected into JS template string.'],
+    29 => ['name' => 'Level 29: Cookie Exfiltration', 'desc' => 'Stored XSS steals session cookie.'],
+    30 => ['name' => 'Level 30: Angular Sandbox Escape', 'desc' => 'No strings, escape Angular sandbox.'],
+    31 => ['name' => 'Level 31: AngularJS CSP Escape', 'desc' => 'Bypass CSP and escape Angular sandbox.'],
 ];
 
 // Pagination Logic
