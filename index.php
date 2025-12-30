@@ -33,6 +33,9 @@ $levels = [
     29 => ['name' => 'Level 29: Cookie Exfiltration', 'desc' => 'Stored XSS steals session cookie.'],
     30 => ['name' => 'Level 30: Angular Sandbox Escape', 'desc' => 'No strings, escape Angular sandbox.'],
     31 => ['name' => 'Level 31: AngularJS CSP Escape', 'desc' => 'Bypass CSP and escape Angular sandbox.'],
+    32 => ['name' => 'Level 32: Reflected XSS (href/events blocked)', 'desc' => 'Bypass via SVG animate to set href.'],
+    33 => ['name' => 'Level 33: JS URL XSS (chars blocked)', 'desc' => 'Reflected XSS in javascript: URL with chars blocked.'],
+    34 => ['name' => 'Level 34: CSP Bypass (report-uri token)', 'desc' => 'Chrome-only CSP directive injection via report-uri.'],
 ];
 
 // Pagination Logic

