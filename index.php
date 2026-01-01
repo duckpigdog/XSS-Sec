@@ -36,6 +36,22 @@ $levels = [
     32 => ['name' => 'Level 32: Reflected XSS (href/events blocked)', 'desc' => 'Bypass via SVG animate to set href.'],
     33 => ['name' => 'Level 33: JS URL XSS (chars blocked)', 'desc' => 'Reflected XSS in javascript: URL with chars blocked.'],
     34 => ['name' => 'Level 34: CSP Bypass (report-uri token)', 'desc' => 'Chrome-only CSP directive injection via report-uri.'],
+    35 => ['name' => 'Level 35: Upload Path URL XSS', 'desc' => 'Independent lab: upload HTML, random rename, URL concat XSS.'],
+    36 => ['name' => 'Level 36: Hidden Adurl Reflected XSS', 'desc' => 'Independent lab: hidden ad anchor reflects adurl/adid.'],
+    37 => ['name' => 'Level 37: Data URL Base64 XSS', 'desc' => 'Blacklist filter; must use data:text/html;base64 in object.'],
+    38 => ['name' => 'Level 38: PDF Upload XSS', 'desc' => 'Independent lab: upload PDF, view opens HTML-in-PDF causing XSS.'],
+    39 => ['name' => 'Level 39: Regex WAF Bypass', 'desc' => 'src/="data:..." bypasses WAF regex.'],
+    40 => ['name' => 'Level 40: Bracket String Bypass', 'desc' => 'href reflects; use window[\"al\"+\"ert\"] to evade WAF.'],
+    41 => ['name' => 'Level 41: Fragment Eval/Window Bypass', 'desc' => 'Echo HTML; split strings then eval or window[a+b].'],
+    42 => ['name' => 'Level 42: Login DB Error XSS', 'desc' => 'Independent lab: invalid DB shows error, SQL reflects username.'],
+    43 => ['name' => 'Level 43: Chat Agent Link XSS', 'desc' => 'Independent lab: chat echoes, agent clicks user link executes.'],
+    44 => ['name' => 'Level 44: CSS Animation Event XSS', 'desc' => 'Strong WAF: only @keyframes+xss onanimationend allowed.'],
+    45 => ['name' => 'Level 45: RCDATA Textarea Breakout XSS', 'desc' => 'Strong WAF: only textarea/title RCDATA breakout works.'],
+    46 => ['name' => 'Level 46: JS String Escape (eval)', 'desc' => 'theme string injection; escape with eval(myUndefVar); alert(1);'],
+    47 => ['name' => 'Level 47: Throw onerror comma XSS', 'desc' => 'Strong WAF: only throw onerror=alert,cookie'],
+    48 => ['name' => 'Level 48: Symbol.hasInstance Bypass', 'desc' => 'Strong WAF: only instanceof+eval chain'],
+    49 => ['name' => 'Level 49: Video Source onerror XSS', 'desc' => 'Strong WAF: only video source onerror'],
+    50 => ['name' => 'Level 50: Bootstrap RealSite XSS', 'desc' => 'Independent site: only xss onanimationstart'],
 ];
 
 // Pagination Logic
