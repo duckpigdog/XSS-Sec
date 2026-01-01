@@ -1,32 +1,32 @@
-# XSS-Sec Lab Project
+# XSS-Sec 靶场项目
 
-This project is a practice arena for XSS vulnerabilities with a “real-world oriented” design, covering reflected, stored, DOM-based, SVG, CSP, framework injection, protocol bypass and more. Unified styling and clear logic make it suitable for systematic learning and teaching demonstrations.
+本项目是一个以“实战为导向”的 XSS 漏洞练习靶场，覆盖反射型、存储型、DOM 型、SVG、CSP、框架注入、协议绕过等多种场景。页面样式统一，逻辑清晰，适合系统化学习与教学演示。
 
 ![](1.png)
 ![](2.png)
 ![](3.png)
 
-## Quick Start
-- Dependencies: PHP 7+ recommended, Chrome (some labs are Chrome-specific)
-- Launch (built-in server example):
-  - Switch terminal to project root (e.g. `d:\Book\XSS-Sec`)
-  - Run PHP server: `php -S 127.0.0.1:3000`
-  - Visit: `http://127.0.0.1:3000/index.php`
-- Other: You can also use Nginx/Apache pointing to the project root (ensure .php executes)
+## 快速开始
+- 依赖：建议安装 PHP 7+（或更高），Chrome（部分关卡仅在 Chrome 下按预期生效）
+- 启动（内置服务器示例）：
+  - 在终端切换到项目根目录（示例路径：`d:\Book\XSS-Sec`）
+  - 运行 PHP 内置服务器：`php -S 127.0.0.1:3000`
+  - 浏览器访问：`http://127.0.0.1:3000/index.php`
+- 其他：也可使用 Nginx/Apache 指向项目根目录（确保 .php 可执行）
 
-## Project Structure
-- `index.php`: Homepage with pagination listing all labs and links
-- `headers.php`: Global HTTP response headers (intentionally relaxed for teaching)
-- `assets/`: Frontend assets (`style.css`, `angular.min.js`, `admin-bot.js`, etc.)
-- `levelXX/`: Lab directories (each with its own `index.php`)
-- `writeup.md`: Per-lab code audit and walkthrough
+## 项目结构
+- `index.php`：首页与分页，列出所有关卡并跳转
+- `headers.php`：全局 HTTP 响应头（为教学目的有意弱化/调整安全策略）
+- `assets/`：前端资源（`style.css`、`angular.min.js`、`admin-bot.js` 等）
+- `levelXX/`：各关卡目录（每关一个 `index.php`）
+- `writeup.md`：按关卡记录的代码审计与通关思路
 
-## Important Notes
-- Security: Some pages are intentionally exploitable for teaching; do not deploy in production
-- Browser compatibility: Certain labs rely on specific browsers (e.g. Level 34 on Chrome)
-- CSP/CORS: `headers.php` sets experimental headers for exercises and demo interaction
+## 重要提示
+- 安全性：为教学目的，部分页面刻意设置为“可被利用”，请勿在生产环境部署
+- 浏览器兼容：个别关卡依赖特定浏览器行为（如 Level 34 在 Chrome 下）
+- CSP 与 CORS：`headers.php` 中设置了统一的实验性响应头，便于练习与联动演示
 
-## Lab Overview (Names and Summaries)
+## 关卡总览（名称与简介）
 - Level 1: Reflected XSS — The basics.
 - Level 2: DOM-based XSS — Client-side manipulation.
 - Level 3: Stored XSS — Persistent payloads.
@@ -78,11 +78,11 @@ This project is a practice arena for XSS vulnerabilities with a “real-world or
 - Level 49: Video Source onerror XSS — Strong WAF: only video source onerror
 - Level 50: Bootstrap RealSite XSS — Independent site: only xss onanimationstart
 
-## Study Tips
-- Each lab has a clear input point and execution sink; read the source before exploiting
-- Use `writeup.md` to review audit notes and understand filter logic defects and parsing behavior
-- Gradually add constraints (char blacklists, tag filters, CSP) to practice different bypass techniques
+## 学习建议
+- 每一关都包含一个明确的“输入点”与“执行点（Sink）”，建议先阅读源码再尝试利用
+- 结合 `writeup.md` 中的审计记录复盘要点，理解过滤逻辑缺陷与浏览器解析特性
+- 逐步增加约束（字符黑名单、标签过滤、CSP 等），练习不同绕过技巧
 
-## Acknowledgement & Usage
-- This project is for security research and teaching only; do not apply techniques to unauthorized systems
-- For classes or training, extend your own solutions based on `writeup.md`
+## 致谢与用途声明
+- 本项目仅用于安全研究与教学演示，切勿将其中技巧应用于未授权的系统
+- 如需在课堂或培训中使用，可在 `writeup.md` 基础上扩展自己的解题过程
