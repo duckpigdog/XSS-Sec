@@ -1,5 +1,7 @@
 # XSS-Sec Lab Project
 
+[中文版](README-CN.md)
+
 This project is a practice arena for XSS vulnerabilities with a “real-world oriented” design, covering reflected, stored, DOM-based, SVG, CSP, framework injection, protocol bypass and more. Unified styling and clear logic make it suitable for systematic learning and teaching demonstrations.
 
 ![](1.png)
