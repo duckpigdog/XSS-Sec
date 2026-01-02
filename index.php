@@ -128,7 +128,7 @@ $end_index = min($start_index + $items_per_page - 1, $total_levels);
         <?php endif; ?>
         
         <div style="text-align: center; margin-top: 50px; font-size: 0.8em; opacity: 0.7;">
-            <p>Created for educational purposes only.</p>
+            <p>Created by the XMCVE</p>
         </div>
     </div>
 </body>
