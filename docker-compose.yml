@@ -1,0 +1,32 @@
+services:
+  xss-lab:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: xss-sec-lab
+    ports:
+      - "${XSS_PORT:-8080}:80"
+    volumes:
+      # Persist stored XSS data between container restarts
+      - xss-data:/var/www/html/data
+      # Mount uploads for file upload levels
+      - xss-uploads-35:/var/www/html/level35/uploads
+      - xss-uploads-38:/var/www/html/level38/uploads
+    environment:
+      - PHP_CLI_SERVER_WORKERS=4
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+volumes:
+  xss-data:
+  xss-uploads-35:
+  xss-uploads-38:
