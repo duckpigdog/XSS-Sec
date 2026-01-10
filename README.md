@@ -9,12 +9,51 @@ This project is a practice arena for XSS vulnerabilities with a “real-world or
 ![](3.png)
 
 ## Quick Start
-- Dependencies: PHP 7+ recommended, Chrome (some labs are Chrome-specific)
-- Launch (built-in server example):
+
+### 1. Using Docker Compose (Recommended)
+You can run the entire environment with a single command. This ensures all dependencies are met and provides isolation.
+
+**Start the Environment:**
+Run the following command in the project root:
+```bash
+docker compose up -d
+```
+- **Access the lab:** Open `http://localhost:8080/index.php` in your browser.
+- **Port:** The application runs on port `8080` by default.
+
+**Stop and Manage Data:**
+It is important to understand the difference between stopping and resetting:
+
+*   **Stop but SAVE progress:**
+    ```bash
+    docker compose down
+    ```
+    This stops the containers but **keeps your data** (e.g., stored XSS comments, uploaded files) safe in Docker volumes. Use this when taking a break.
+
+*   **Stop and RESET everything:**
+    ```bash
+    docker compose down -v
+    ```
+    This stops the containers and **deletes all data** (volumes). The lab will return to a clean, fresh state. Use this to restart challenges from scratch.
+
+### 2. Using the Prebuilt Image
+If you prefer not to build from source (e.g., for quick testing), pull the image directly:
+```bash
+docker pull suc2es2/xss-sec:latest
+```
+
+Run it with:
+```bash
+docker run -d -p 8080:80 suc2es2/xss-sec:latest
+```
+
+### 3. Manual Setup (Legacy)
+- **Dependencies:** PHP 7+ recommended, Chrome (some labs are Chrome-specific)
+- **Launch (built-in server example):**
   - Switch terminal to project root (e.g. `d:\Book\XSS-Sec`)
   - Run PHP server: `php -S 127.0.0.1:3000`
   - Visit: `http://127.0.0.1:3000/index.php`
-- Other: You can also use Nginx/Apache pointing to the project root (ensure .php executes)
+- **Other:** You can also use Nginx/Apache pointing to the project root (ensure .php executes)
 
 ## Project Structure
 - `index.php`: Homepage with pagination listing all labs and links
